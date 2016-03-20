@@ -1,14 +1,14 @@
 package main
 
 import (
-	"github.com/bwmarrin/discordgo"
 	"fmt"
+	"github.com/bwmarrin/discordgo"
+	"math/rand"
 	"os"
 	"os/exec"
-	"math/rand"
 	"regexp"
-	"strings"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -42,7 +42,7 @@ func forsen(args []string) (string, error) {
 
 func roll(args []string) (string, error) {
 	var max int
-	if (len(args) < 1) {
+	if len(args) < 1 {
 		max = 6
 	} else {
 		var err error
@@ -63,20 +63,20 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + myUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	funcMap := map[string]command{
 		"twitch": command(twitch),
-		"soda": command(soda),
-		"lirik": command(lirik),
+		"soda":   command(soda),
+		"lirik":  command(lirik),
 		"forsen": command(forsen),
-		"roll": command(roll),
-		"help": command(help),
+		"roll":   command(roll),
+		"help":   command(help),
 	}
 
-	return func (s *discordgo.Session, m *discordgo.MessageCreate) {
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, time.Now().Format(time.Stamp), m.Author.Username, m.Content)
 		if m.Author.ID == myUserID {
 			return
 		}
 		channel, err := s.Channel(m.ChannelID)
-		if (err != nil) {
+		if err != nil {
 			return
 		}
 		if channel.IsPrivate {
