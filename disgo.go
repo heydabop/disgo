@@ -187,7 +187,7 @@ func roll(chanId, authorId string, args []string) (string, error) {
 }
 
 func help(chanId, authorId string, args []string) (string, error) {
-	return "twitch [streamer], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--)", nil
+	return "twitch [streamer], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional)", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
