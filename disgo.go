@@ -32,6 +32,8 @@ func (u UserVotes) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
 }
 
+const myUserID = "160807650345353226"
+
 var redisClient *redis.Client
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
@@ -76,12 +78,21 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	} else {
 		return "", errors.New("No valid mention found")
 	}
-	if authorId == userId {
-		return "No.", nil
+	if authorId != myUserID {
+		lastVoteTime, validTime := voteTime[authorId]
+		if validTime && time.Since(lastVoteTime).Minutes() < 5 {
+			return "Slow down champ.", nil
+		}
 	}
-	lastVoteTime, validTime := voteTime[authorId]
-	if validTime && time.Since(lastVoteTime).Minutes() < 5 {
-		return "Slow down champ.", nil
+	if authorId == userId {
+		if inc > 0 {
+			_, err := vote(chanId, myUserID, []string{"<@" + authorId + ">"}, -1)
+			if err != nil {
+				return "", err
+			}
+			voteTime[authorId] = time.Now()
+		}
+		return "No.", nil
 	}
 	redisKey := fmt.Sprintf("disgo-userKarma-%s-%s", chanId, userId)
 	karma := redisClient.Cmd("GET", redisKey)
@@ -191,7 +202,6 @@ func help(chanId, authorId string, args []string) (string, error) {
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
-	const myUserID = "160807650345353226"
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + myUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
