@@ -17,6 +17,7 @@ import (
 type command func(string, string, []string) (string, error)
 
 var redisClient *redis.Client
+var voteTime map[string]time.Time = make(map[string]time.Time)
 
 func twitch(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -62,6 +63,10 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	if authorId == userId {
 		return "No.", nil
 	}
+	lastVoteTime, validTime := voteTime[authorId]
+	if validTime && time.Since(lastVoteTime).Minutes() < 5 {
+		return "Slow down champ.", nil
+	}
 	redisKey := fmt.Sprintf("disgo-userKarma-%s-%s", chanId, userId)
 	karma := redisClient.Cmd("GET", redisKey)
 	if karma.Err != nil {
@@ -77,6 +82,7 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 		karmaVal += inc
 		redisClient.Cmd("set", redisKey, karmaVal)
 	}
+	voteTime[authorId] = time.Now()
 	return "", nil
 }
 
@@ -103,7 +109,7 @@ func roll(chanId, authorId string, args []string) (string, error) {
 }
 
 func help(chanId, authorId string, args []string) (string, error) {
-	return "twitch [streamer], soda, lirik, forsen, roll [sides (optional)]", nil
+	return "twitch [streamer], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--)", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
