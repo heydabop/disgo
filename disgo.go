@@ -9,15 +9,32 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
 
-type command func(string, string, []string) (string, error)
+type Command func(string, string, []string) (string, error)
+type UserVote struct {
+	userId string
+	votes  int64
+}
+type UserVotes []UserVote
+
+func (u UserVotes) Len() int {
+	return len(u)
+}
+func (u UserVotes) Less(i, j int) bool {
+	return u[i].votes-u[j].votes > 0
+}
+func (u UserVotes) Swap(i, j int) {
+	u[i], u[j] = u[j], u[i]
+}
 
 var redisClient *redis.Client
 var voteTime map[string]time.Time = make(map[string]time.Time)
+var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 
 func twitch(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -53,7 +70,6 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 		return "", errors.New("No userId provided")
 	}
 	userMention := args[0]
-	userIdRegex := regexp.MustCompile(`<@(\d+?)>`)
 	var userId string
 	if match := userIdRegex.FindStringSubmatch(userMention); match != nil {
 		userId = match[1]
@@ -94,6 +110,68 @@ func downvote(chanId, authorId string, args []string) (string, error) {
 	return vote(chanId, authorId, args, -1)
 }
 
+func votes(chanId, authorId string, args []string) (string, error) {
+	if len(args) > 0 {
+		var userId string
+		fmt.Println(args[0])
+		if match := userIdRegex.FindStringSubmatch(args[0]); match != nil {
+			userId = match[1]
+		} else {
+			return "", errors.New("No valid mention found")
+		}
+		karma := redisClient.Cmd("get", fmt.Sprintf("disgo-userKarma-%s-%s", chanId, userId))
+		if karma.Err != nil {
+			return "", karma.Err
+		}
+		karmaStr, err := karma.Str()
+		if err != nil {
+			return "", err
+		}
+		return karmaStr, nil
+	} else {
+		keys := redisClient.Cmd("keys", fmt.Sprintf("disgo-userKarma-%s*", chanId))
+		if keys.Err != nil {
+			return "", keys.Err
+		}
+		votes := make(UserVotes, 0)
+		keyStrings, err := keys.List()
+		if err != nil {
+			return "", err
+		}
+		for _, key := range keyStrings {
+			karma := redisClient.Cmd("get", key)
+			if karma.Err != nil {
+				return "", karma.Err
+			}
+			karmaVal, err := karma.Int64()
+			if err != nil {
+				return "", err
+			}
+			var userId string
+			userKeyRegex := regexp.MustCompile(`disgo-userKarma-` + chanId + `-(\d+)`)
+			if match := userKeyRegex.FindStringSubmatch(key); match != nil {
+				userId = match[1]
+			} else {
+				return "", errors.New("No userId found in redis key")
+			}
+			votes = append(votes, UserVote{userId, karmaVal})
+		}
+		sort.Sort(&votes)
+		finalString := ""
+		for i, vote := range votes {
+			if i >= 5 {
+				break
+			}
+			finalString += fmt.Sprintf("<@%s>: %d, ", vote.userId, vote.votes)
+		}
+		if len(finalString) > 0 {
+			return finalString[:len(finalString)-2], nil
+		} else {
+			return "", nil
+		}
+	}
+}
+
 func roll(chanId, authorId string, args []string) (string, error) {
 	var max int
 	if len(args) < 1 {
@@ -117,15 +195,17 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + myUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
-	funcMap := map[string]command{
-		"twitch":   command(twitch),
-		"soda":     command(soda),
-		"lirik":    command(lirik),
-		"forsen":   command(forsen),
-		"roll":     command(roll),
-		"help":     command(help),
-		"upvote":   command(upvote),
-		"downvote": command(downvote),
+	funcMap := map[string]Command{
+		"twitch":   Command(twitch),
+		"soda":     Command(soda),
+		"lirik":    Command(lirik),
+		"forsen":   Command(forsen),
+		"roll":     Command(roll),
+		"help":     Command(help),
+		"upvote":   Command(upvote),
+		"downvote": Command(downvote),
+		"votes":    Command(votes),
+		"karma":    Command(votes),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -164,6 +244,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			reply, err := cmd(m.ChannelID, m.Author.ID, command[1:])
 			if err != nil {
+				fmt.Println("ERROR in " + command[0])
+				fmt.Printf("ARGS: %v\n", command[1:])
 				fmt.Println("ERROR: " + err.Error())
 				return
 			}
