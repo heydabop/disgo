@@ -14,11 +14,11 @@ import (
 	"time"
 )
 
-type command func([]string) (string, error)
+type command func(string, string, []string) (string, error)
 
 var redisClient *redis.Client
 
-func twitch(args []string) (string, error) {
+func twitch(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No channel name provided")
 	}
@@ -35,19 +35,19 @@ func twitch(args []string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func soda(args []string) (string, error) {
-	return twitch([]string{"sodapoppin"})
+func soda(chanId, authorId string, args []string) (string, error) {
+	return twitch(chanId, authorId, []string{"sodapoppin"})
 }
 
-func lirik(args []string) (string, error) {
-	return twitch([]string{"lirik"})
+func lirik(chanId, authorId string, args []string) (string, error) {
+	return twitch(chanId, authorId, []string{"lirik"})
 }
 
-func forsen(args []string) (string, error) {
-	return twitch([]string{"forsenlol"})
+func forsen(chanId, authorId string, args []string) (string, error) {
+	return twitch(chanId, authorId, []string{"forsenlol"})
 }
 
-func vote(args []string, inc int64) (string, error) {
+func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No userId provided")
 	}
@@ -59,7 +59,10 @@ func vote(args []string, inc int64) (string, error) {
 	} else {
 		return "", errors.New("No valid mention found")
 	}
-	redisKey := "disgo-userKarma-" + userId
+	if authorId == userId {
+		return "No.", nil
+	}
+	redisKey := fmt.Sprintf("disgo-userKarma-%s-%s", chanId, userId)
 	karma := redisClient.Cmd("GET", redisKey)
 	if karma.Err != nil {
 		return "", karma.Err
@@ -77,15 +80,15 @@ func vote(args []string, inc int64) (string, error) {
 	return "", nil
 }
 
-func upvote(args []string) (string, error) {
-	return vote(args, 1)
+func upvote(chanId, authorId string, args []string) (string, error) {
+	return vote(chanId, authorId, args, 1)
 }
 
-func downvote(args []string) (string, error) {
-	return vote(args, -1)
+func downvote(chanId, authorId string, args []string) (string, error) {
+	return vote(chanId, authorId, args, -1)
 }
 
-func roll(args []string) (string, error) {
+func roll(chanId, authorId string, args []string) (string, error) {
 	var max int
 	if len(args) < 1 {
 		max = 6
@@ -99,13 +102,15 @@ func roll(args []string) (string, error) {
 	return strconv.Itoa(rand.Intn(max) + 1), nil
 }
 
-func help(args []string) (string, error) {
+func help(chanId, authorId string, args []string) (string, error) {
 	return "twitch [streamer], soda, lirik, forsen, roll [sides (optional)]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	const myUserID = "160807650345353226"
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + myUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
+	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
+	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	funcMap := map[string]command{
 		"twitch":   command(twitch),
 		"soda":     command(soda),
@@ -130,19 +135,36 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageSend(m.ChannelID, "wan sum fuk?")
 			return
 		}
-		for _, regex := range regexes {
-			if match := regex.FindStringSubmatch(m.Content); match != nil {
-				command := strings.Fields(match[1])
-				if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
-					reply, err := cmd(command[1:])
-					if err != nil {
-						fmt.Println("ERROR: " + err.Error())
-						return
-					}
-					s.ChannelMessageSend(m.ChannelID, reply)
-					return
+		var command []string
+		if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
+			command = []string{"upvote", match[1]}
+		}
+		if len(command) == 0 {
+			if match := downvoteRegex.FindStringSubmatch(m.Content); match != nil {
+				command = []string{"downvote", match[1]}
+			}
+		}
+		if len(command) == 0 {
+			for _, regex := range regexes {
+				if match := regex.FindStringSubmatch(m.Content); match != nil {
+					command = strings.Fields(match[1])
+					break
 				}
 			}
+		}
+		if len(command) == 0 {
+			return
+		}
+		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
+			reply, err := cmd(m.ChannelID, m.Author.ID, command[1:])
+			if err != nil {
+				fmt.Println("ERROR: " + err.Error())
+				return
+			}
+			if len(reply) > 0 {
+				s.ChannelMessageSend(m.ChannelID, reply)
+			}
+			return
 		}
 	}
 }
