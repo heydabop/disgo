@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/fzzy/radix/redis"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -14,7 +16,12 @@ import (
 
 type command func([]string) (string, error)
 
+var redisClient *redis.Client
+
 func twitch(args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No channel name provided")
+	}
 	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
 	logs, err := os.Open("/home/ross/markov/" + args[0] + "_nolink")
 	if err != nil {
@@ -40,6 +47,44 @@ func forsen(args []string) (string, error) {
 	return twitch([]string{"forsenlol"})
 }
 
+func vote(args []string, inc int64) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No userId provided")
+	}
+	userMention := args[0]
+	userIdRegex := regexp.MustCompile(`<@(\d+?)>`)
+	var userId string
+	if match := userIdRegex.FindStringSubmatch(userMention); match != nil {
+		userId = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+	redisKey := "disgo-userKarma-" + userId
+	karma := redisClient.Cmd("GET", redisKey)
+	if karma.Err != nil {
+		return "", karma.Err
+	}
+	if karma.Type == redis.NilReply {
+		redisClient.Cmd("set", redisKey, 0+inc)
+	} else {
+		karmaVal, err := karma.Int64()
+		if err != nil {
+			return "", err
+		}
+		karmaVal += inc
+		redisClient.Cmd("set", redisKey, karmaVal)
+	}
+	return "", nil
+}
+
+func upvote(args []string) (string, error) {
+	return vote(args, 1)
+}
+
+func downvote(args []string) (string, error) {
+	return vote(args, -1)
+}
+
 func roll(args []string) (string, error) {
 	var max int
 	if len(args) < 1 {
@@ -62,12 +107,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	const myUserID = "160807650345353226"
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + myUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	funcMap := map[string]command{
-		"twitch": command(twitch),
-		"soda":   command(soda),
-		"lirik":  command(lirik),
-		"forsen": command(forsen),
-		"roll":   command(roll),
-		"help":   command(help),
+		"twitch":   command(twitch),
+		"soda":     command(soda),
+		"lirik":    command(lirik),
+		"forsen":   command(forsen),
+		"roll":     command(roll),
+		"help":     command(help),
+		"upvote":   command(upvote),
+		"downvote": command(downvote),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -101,6 +148,12 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 }
 
 func main() {
+	var err error
+	redisClient, err = redis.Dial("tcp", "127.0.0.1:6379")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 
 	if err != nil {
 		fmt.Println(err)
