@@ -213,14 +213,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if m.Author.ID == myUserID {
 			return
 		}
-		channel, err := s.Channel(m.ChannelID)
-		if err != nil {
-			return
-		}
-		if channel.IsPrivate {
-			s.ChannelMessageSend(m.ChannelID, "wan sum fuk?")
-			return
-		}
 		var command []string
 		if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
 			command = []string{"upvote", match[1]}
