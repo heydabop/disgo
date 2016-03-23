@@ -5,39 +5,25 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
-	"github.com/fzzy/radix/redis"
 	_ "github.com/mattn/go-sqlite3"
 	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type Command func(string, string, []string) (string, error)
-type UserVote struct {
-	userId string
-	votes  int64
-}
-type UserVotes []UserVote
-
-func (u UserVotes) Len() int {
-	return len(u)
-}
-func (u UserVotes) Less(i, j int) bool {
-	return u[i].votes-u[j].votes > 0
-}
-func (u UserVotes) Swap(i, j int) {
-	u[i], u[j] = u[j], u[i]
+type KarmaDto struct {
+	UserId string
+	Karma  int64
 }
 
 const myUserID = "160807650345353226"
 
 var sqlClient *sql.DB
-var redisClient *redis.Client
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 
@@ -108,21 +94,27 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 		}
 		return "No.", nil
 	}
-	redisKey := fmt.Sprintf("disgo-userKarma-%s-%s", chanId, userId)
-	karma := redisClient.Cmd("GET", redisKey)
-	if karma.Err != nil {
-		return "", karma.Err
-	}
-	if karma.Type == redis.NilReply {
-		redisClient.Cmd("set", redisKey, 0+inc)
-	} else {
-		karmaVal, err := karma.Int64()
-		if err != nil {
+
+	var karma int64
+	err := sqlClient.QueryRow("select Karma from karma where ChanId = ? and UserId = ?", chanId, userId).Scan(&karma)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			karma = 0
+			_, insertErr := sqlClient.Exec("insert into Karma(ChanId, UserId, Karma) values (?, ?, ?)", chanId, userId, karma)
+			if insertErr != nil {
+				return "", err
+			}
+		} else {
 			return "", err
 		}
-		karmaVal += inc
-		redisClient.Cmd("set", redisKey, karmaVal)
 	}
+
+	karma += inc
+	_, err = sqlClient.Exec("update karma set Karma = ? where ChanId = ? and UserId = ?", karma, chanId, userId)
+	if err != nil {
+		return "", err
+	}
+
 	voteTime[authorId] = time.Now()
 	return "", nil
 }
@@ -144,50 +136,34 @@ func votes(chanId, authorId string, args []string) (string, error) {
 		} else {
 			return "", errors.New("No valid mention found")
 		}
-		karma := redisClient.Cmd("get", fmt.Sprintf("disgo-userKarma-%s-%s", chanId, userId))
-		if karma.Err != nil {
-			return "", karma.Err
-		}
-		karmaStr, err := karma.Str()
+		var karma int64
+		err := sqlClient.QueryRow("select Karma from karma where ChanId = ? and UserId = ?", chanId, userId).Scan(&karma)
 		if err != nil {
 			return "", err
 		}
-		return karmaStr, nil
+		return strconv.FormatInt(karma, 10), nil
 	} else {
-		keys := redisClient.Cmd("keys", fmt.Sprintf("disgo-userKarma-%s*", chanId))
-		if keys.Err != nil {
-			return "", keys.Err
-		}
-		votes := make(UserVotes, 0)
-		keyStrings, err := keys.List()
+		rows, err := sqlClient.Query("select UserId, Karma from karma where ChanId = ? order by Karma desc limit 5", chanId)
 		if err != nil {
 			return "", err
 		}
-		for _, key := range keyStrings {
-			karma := redisClient.Cmd("get", key)
-			if karma.Err != nil {
-				return "", karma.Err
-			}
-			karmaVal, err := karma.Int64()
+		defer rows.Close()
+		votes := make([]KarmaDto, 0)
+		for rows.Next() {
+			var userId string
+			var karma int64
+			err := rows.Scan(&userId, &karma)
 			if err != nil {
 				return "", err
 			}
-			var userId string
-			userKeyRegex := regexp.MustCompile(`disgo-userKarma-` + chanId + `-(\d+)`)
-			if match := userKeyRegex.FindStringSubmatch(key); match != nil {
-				userId = match[1]
-			} else {
-				return "", errors.New("No userId found in redis key")
-			}
-			votes = append(votes, UserVote{userId, karmaVal})
+			votes = append(votes, KarmaDto{userId, karma})
 		}
-		sort.Sort(&votes)
 		finalString := ""
 		for i, vote := range votes {
 			if i >= 5 {
 				break
 			}
-			finalString += fmt.Sprintf("<@%s>: %d, ", vote.userId, vote.votes)
+			finalString += fmt.Sprintf("<@%s>: %d, ", vote.UserId, vote.Karma)
 		}
 		if len(finalString) > 0 {
 			return finalString[:len(finalString)-2], nil
@@ -282,17 +258,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 func main() {
 	var err error
-	redisClient, err = redis.Dial("tcp", "127.0.0.1:6379")
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	sqlClient, err = sql.Open("sqlite3", "disgo.db")
+	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
+	client, err := discordgo.New("heydabopf@gmail.com", "Mo3eequucee(y6oh")
 	if err != nil {
 		fmt.Println(err)
 		return
