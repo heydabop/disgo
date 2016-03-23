@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	"github.com/fzzy/radix/redis"
+	_ "github.com/mattn/go-sqlite3"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -34,6 +36,7 @@ func (u UserVotes) Swap(i, j int) {
 
 const myUserID = "160807650345353226"
 
+var sqlClient *sql.DB
 var redisClient *redis.Client
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
@@ -230,7 +233,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, time.Now().Format(time.Stamp), m.Author.Username, m.Content)
+		now := time.Now()
+		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, now.Format(time.Stamp), m.Author.Username, m.Content)
+		_, err := sqlClient.Exec("INSERT INTO messages (ChanId, AuthorId, Timestamp, Message) values (?, ?, ?, ?)",
+			m.ChannelID, m.Author.ID, now.Format(time.RFC3339Nano), m.Content)
+		if err != nil {
+			fmt.Println("ERROR inserting into messages db")
+			fmt.Println(err.Error())
+		}
 		if m.Author.ID == myUserID {
 			return
 		}
@@ -273,6 +283,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 func main() {
 	var err error
 	redisClient, err = redis.Dial("tcp", "127.0.0.1:6379")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	sqlClient, err = sql.Open("sqlite3", "disgo.db")
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
