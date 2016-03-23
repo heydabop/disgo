@@ -40,7 +40,18 @@ var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 
 func twitch(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
-		return "", errors.New("No channel name provided")
+		cmd := exec.Command("find", "-iname", "*_nolink")
+		cmd.Dir = "/home/ross/markov/"
+		out, err := cmd.Output()
+		if err != nil {
+			return "", err
+		}
+		files := strings.Fields(string(out))
+		for i := range files {
+			files[i] = strings.Replace(files[i], "./", "", 1)
+			files[i] = strings.Replace(files[i], "_nolink", "", 1)
+		}
+		return strings.Join(files, ", "), nil
 	}
 	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
 	logs, err := os.Open("/home/ross/markov/" + args[0] + "_nolink")
@@ -198,7 +209,7 @@ func roll(chanId, authorId string, args []string) (string, error) {
 }
 
 func help(chanId, authorId string, args []string) (string, error) {
-	return "twitch [streamer], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional)", nil
+	return "twitch [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional)", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
