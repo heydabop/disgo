@@ -1,0 +1,4 @@
+config.go
+disgo
+*.db
+*.bak
