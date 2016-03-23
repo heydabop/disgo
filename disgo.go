@@ -21,7 +21,7 @@ type KarmaDto struct {
 	Karma  int64
 }
 
-const myUserID = "160807650345353226"
+const OWN_USER_ID = "160807650345353226"
 
 var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
@@ -78,7 +78,7 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	} else {
 		return "", errors.New("No valid mention found")
 	}
-	if authorId != myUserID {
+	if authorId != OWN_USER_ID {
 		lastVoteTime, validTime := voteTime[authorId]
 		if validTime && time.Since(lastVoteTime).Minutes() < 5 {
 			return "Slow down champ.", nil
@@ -86,7 +86,7 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	}
 	if authorId == userId {
 		if inc > 0 {
-			_, err := vote(chanId, myUserID, []string{"<@" + authorId + ">"}, -1)
+			_, err := vote(chanId, OWN_USER_ID, []string{"<@" + authorId + ">"}, -1)
 			if err != nil {
 				return "", err
 			}
@@ -200,7 +200,7 @@ func help(chanId, authorId string, args []string) (string, error) {
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
-	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + myUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
+	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + OWN_USER_ID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	funcMap := map[string]Command{
@@ -226,7 +226,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println("ERROR inserting into messages db")
 			fmt.Println(err.Error())
 		}
-		if m.Author.ID == myUserID {
+		if m.Author.ID == OWN_USER_ID {
 			return
 		}
 		var command []string
@@ -273,7 +273,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := discordgo.New("heydabopf@gmail.com", "Mo3eequucee(y6oh")
+	client, err := discordgo.New(LOGIN_EMAIL, LOGIN_PASSWORD)
 	if err != nil {
 		fmt.Println(err)
 		return
