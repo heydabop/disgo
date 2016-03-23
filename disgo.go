@@ -187,8 +187,16 @@ func roll(chanId, authorId string, args []string) (string, error) {
 	return strconv.Itoa(rand.Intn(max) + 1), nil
 }
 
+func uptime(chanId, authorId string, args []string) (string, error) {
+	output, err := exec.Command("uptime").Output()
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
 func help(chanId, authorId string, args []string) (string, error) {
-	return "twitch [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional)", nil
+	return "twitch [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -206,6 +214,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"downvote": Command(downvote),
 		"votes":    Command(votes),
 		"karma":    Command(votes),
+		"uptime":   Command(uptime),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
