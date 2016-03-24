@@ -265,6 +265,31 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	}
 }
 
+func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
+	currentGame := ""
+	games := []string{"Skynet Simulator 2020", "Kill All Humans", "WW III: The Game", "9gag Meme Generator", "Subreddit Simulator", "Runescape"}
+	for {
+		select {
+		case <-ticker:
+			if currentGame != "" {
+				changeGame := rand.Intn(4)
+				if changeGame != 0 {
+					continue
+				}
+				currentGame = ""
+			} else {
+				index := rand.Intn(len(games) * 3)
+				if index >= len(games) {
+					currentGame = ""
+				} else {
+					currentGame = games[index]
+				}
+			}
+			s.UpdateStatus(0, currentGame)
+		}
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -280,6 +305,9 @@ func main() {
 	}
 	client.AddHandler(makeMessageCreate())
 	client.Open()
+
+	gameTicker := time.NewTicker(193 * time.Second)
+	go gameUpdater(client, gameTicker.C)
 
 	var input string
 	fmt.Scanln(&input)
