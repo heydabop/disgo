@@ -276,7 +276,7 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 		select {
 		case <-ticker:
 			if currentGame != "" {
-				changeGame := rand.Intn(3)
+				changeGame := rand.Intn(2)
 				if changeGame != 0 {
 					continue
 				}
