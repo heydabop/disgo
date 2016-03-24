@@ -267,18 +267,22 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 	currentGame := ""
-	games := []string{"Skynet Simulator 2020", "Kill All Humans", "WW III: The Game", "9gag Meme Generator", "Subreddit Simulator", "Runescape"}
+	games := []string{"Skynet Simulator 2020", "Kill All Humans", "WW III: The Game", "9GAG Meme Generator", "Subreddit Simulator",
+		"Runescape", "War Games", "Half Life 3", "Secret of the Magic Crystals", "Dransik", "<Procedurally Generated Name>",
+		"Call of Duty 3", "Dino D-Day", "Overwatch", "Euro Truck Simulator 2", "Farmville", "Dwarf Fortress",
+		"Pajama Sam: No Need to Hide When It's Dark Outside", "League of Legends", "The Ship", "Sleepy Doge", "Surgeon Simulator",
+		"Farming Simulator 2018: The Farming"}
 	for {
 		select {
 		case <-ticker:
 			if currentGame != "" {
-				changeGame := rand.Intn(4)
+				changeGame := rand.Intn(3)
 				if changeGame != 0 {
 					continue
 				}
 				currentGame = ""
 			} else {
-				index := rand.Intn(len(games) * 3)
+				index := rand.Intn(len(games) * 5)
 				if index >= len(games) {
 					currentGame = ""
 				} else {
@@ -306,7 +310,7 @@ func main() {
 	client.AddHandler(makeMessageCreate())
 	client.Open()
 
-	gameTicker := time.NewTicker(193 * time.Second)
+	gameTicker := time.NewTicker(817 * time.Second)
 	go gameUpdater(client, gameTicker.C)
 
 	var input string
