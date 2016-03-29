@@ -37,7 +37,7 @@ type TwitchStream struct {
 	Channel    TwitchChannel `json:"channel"`
 }
 type TwitchStreamReply struct {
-	Stream TwitchStream `json:"stream"`
+	Stream *TwitchStream `json:"stream"`
 }
 
 const OWN_USER_ID = "160807650345353226"
@@ -233,8 +233,7 @@ func twitch(chanId, authorId string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Printf("%+v\n", reply)
-	if reply.Stream.Id == 0 {
+	if reply.Stream == nil {
 		return "[Offline]", nil
 	}
 	return fmt.Sprintf(`%s playing %s
