@@ -374,9 +374,11 @@ func main() {
 		if t.UserID == OWN_USER_ID {
 			return
 		}
-		if rand.Intn(15) == 0 {
-			typingTimer[t.UserID] = time.AfterFunc(15*time.Second, func() {
-				s.ChannelMessageSend(t.ChannelID, "<@"+t.UserID+"> Something to say??")
+		if rand.Intn(20) == 0 {
+			typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
+				responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
+				responseId := rand.Intn(len(responses))
+				s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseId]))
 			})
 		}
 	})
