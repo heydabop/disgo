@@ -2,11 +2,15 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
 	_ "github.com/mattn/go-sqlite3"
+	"io/ioutil"
+	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -20,6 +24,21 @@ type KarmaDto struct {
 	UserId string
 	Karma  int64
 }
+type TwitchChannel struct {
+	DisplayName string `json:"display_name"`
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+}
+type TwitchStream struct {
+	Id         int           `json:"_id"`
+	AverageFps float64       `json:"average_fps"`
+	Game       string        `json:"game"`
+	Viewers    int           `json:"viewers"`
+	Channel    TwitchChannel `json:"channel"`
+}
+type TwitchStreamReply struct {
+	Stream TwitchStream `json:"stream"`
+}
 
 const OWN_USER_ID = "160807650345353226"
 
@@ -27,7 +46,7 @@ var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 
-func twitch(chanId, authorId string, args []string) (string, error) {
+func spam(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
 		cmd := exec.Command("find", "-iname", "*_nolink")
 		cmd.Dir = "/home/ross/markov/"
@@ -56,15 +75,15 @@ func twitch(chanId, authorId string, args []string) (string, error) {
 }
 
 func soda(chanId, authorId string, args []string) (string, error) {
-	return twitch(chanId, authorId, []string{"sodapoppin"})
+	return spam(chanId, authorId, []string{"sodapoppin"})
 }
 
 func lirik(chanId, authorId string, args []string) (string, error) {
-	return twitch(chanId, authorId, []string{"lirik"})
+	return spam(chanId, authorId, []string{"lirik"})
 }
 
 func forsen(chanId, authorId string, args []string) (string, error) {
-	return twitch(chanId, authorId, []string{"forsenlol"})
+	return spam(chanId, authorId, []string{"forsenlol"})
 }
 
 func vote(chanId, authorId string, args []string, inc int64) (string, error) {
@@ -195,16 +214,45 @@ func uptime(chanId, authorId string, args []string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+func twitch(chanId, authorId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No stream provided")
+	}
+	streamName := args[0]
+	res, err := http.Get(fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", streamName))
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	var reply TwitchStreamReply
+	err = json.Unmarshal(body, &reply)
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("%+v\n", reply)
+	if reply.Stream.Id == 0 {
+		return "[Offline]", nil
+	}
+	return fmt.Sprintf(`%s playing %s
+%s
+%d viewers; %.f FPS`, reply.Stream.Channel.Name, reply.Stream.Game, reply.Stream.Channel.Status, reply.Stream.Viewers, math.Floor(reply.Stream.AverageFps+0.5)), nil
+}
+
 func help(chanId, authorId string, args []string) (string, error) {
-	return "twitch [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + OWN_USER_ID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
+	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
 	funcMap := map[string]Command{
-		"twitch":   Command(twitch),
+		"spam":     Command(spam),
 		"soda":     Command(soda),
 		"lirik":    Command(lirik),
 		"forsen":   Command(forsen),
@@ -215,6 +263,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"votes":    Command(votes),
 		"karma":    Command(votes),
 		"uptime":   Command(uptime),
+		"twitch":   Command(twitch),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -236,6 +285,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if len(command) == 0 {
 			if match := downvoteRegex.FindStringSubmatch(m.Content); match != nil {
 				command = []string{"downvote", match[1]}
+			}
+		}
+		if len(command) == 0 {
+			if match := twitchRegex.FindStringSubmatch(m.Content); match != nil {
+				command = []string{"twitch", match[2]}
 			}
 		}
 		if len(command) == 0 {
