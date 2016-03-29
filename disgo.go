@@ -45,6 +45,7 @@ const OWN_USER_ID = "160807650345353226"
 var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
+var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
 
 func spam(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -268,15 +269,22 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		now := time.Now()
 		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, now.Format(time.Stamp), m.Author.Username, m.Content)
+
 		_, err := sqlClient.Exec("INSERT INTO messages (ChanId, AuthorId, Timestamp, Message) values (?, ?, ?, ?)",
 			m.ChannelID, m.Author.ID, now.Format(time.RFC3339Nano), m.Content)
 		if err != nil {
 			fmt.Println("ERROR inserting into messages db")
 			fmt.Println(err.Error())
 		}
+
 		if m.Author.ID == OWN_USER_ID {
 			return
 		}
+
+		if typingTimer, valid := typingTimer[m.Author.ID]; valid {
+			typingTimer.Stop()
+		}
+
 		var command []string
 		if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
 			command = []string{"upvote", match[1]}
@@ -302,6 +310,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if len(command) == 0 {
 			return
 		}
+		s.ChannelTyping(m.ChannelID)
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			reply, err := cmd(m.ChannelID, m.Author.ID, command[1:])
 			if err != nil {
@@ -361,6 +370,16 @@ func main() {
 		return
 	}
 	client.AddHandler(makeMessageCreate())
+	client.AddHandler(func(s *discordgo.Session, t *discordgo.TypingStart) {
+		if t.UserID == OWN_USER_ID {
+			return
+		}
+		if rand.Intn(15) == 0 {
+			typingTimer[t.UserID] = time.AfterFunc(15*time.Second, func() {
+				s.ChannelMessageSend(t.ChannelID, "<@"+t.UserID+"> Something to say??")
+			})
+		}
+	})
 	client.Open()
 
 	gameTicker := time.NewTicker(817 * time.Second)
