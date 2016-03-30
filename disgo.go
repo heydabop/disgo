@@ -388,7 +388,7 @@ func main() {
 				fmt.Println(err.Error())
 				return
 			}
-			time.AfterFunc(1254*time.Second, func() {
+			time.AfterFunc(time.Duration(rand.Int63n(1200)+600)*time.Second, func() {
 				err := s.ChannelVoiceLeave()
 				if err != nil {
 					fmt.Println(err.Error())
