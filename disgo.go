@@ -310,7 +310,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if len(command) == 0 {
 			return
 		}
-		s.ChannelTyping(m.ChannelID)
+		if command[0] != "upvote" && command[0] != "downvote" {
+			s.ChannelTyping(m.ChannelID)
+		}
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			reply, err := cmd(m.ChannelID, m.Author.ID, command[1:])
 			if err != nil {
@@ -370,6 +372,30 @@ func main() {
 		return
 	}
 	client.AddHandler(makeMessageCreate())
+	client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+		fmt.Printf("VOICE: %s %s %s\n", v.UserID, v.SessionID, v.ChannelID)
+		if len(v.ChannelID) == 0 || v.UserID == OWN_USER_ID {
+			return
+		}
+		if rand.Intn(20) == 0 {
+			channel, err := s.Channel(v.ChannelID)
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+			err = s.ChannelVoiceJoin(channel.GuildID, v.ChannelID, true, false)
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+			time.AfterFunc(1254*time.Second, func() {
+				err := s.ChannelVoiceLeave()
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			})
+		}
+	})
 	client.AddHandler(func(s *discordgo.Session, t *discordgo.TypingStart) {
 		if t.UserID == OWN_USER_ID {
 			return
