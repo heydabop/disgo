@@ -30,11 +30,12 @@ type TwitchChannel struct {
 	Status      string `json:"status"`
 }
 type TwitchStream struct {
-	Id         int           `json:"_id"`
-	AverageFps float64       `json:"average_fps"`
-	Game       string        `json:"game"`
-	Viewers    int           `json:"viewers"`
-	Channel    TwitchChannel `json:"channel"`
+	Id          int           `json:"_id"`
+	AverageFps  float64       `json:"average_fps"`
+	Game        string        `json:"game"`
+	Viewers     int           `json:"viewers"`
+	Channel     TwitchChannel `json:"channel"`
+	VideoHeight int           `json:"video_height"`
 }
 type TwitchStreamReply struct {
 	Stream *TwitchStream `json:"stream"`
@@ -46,6 +47,8 @@ var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
+var currentVoiceChannel = ""
+var currentVoiceGuild = ""
 
 func spam(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -239,7 +242,7 @@ func twitch(chanId, authorId string, args []string) (string, error) {
 	}
 	return fmt.Sprintf(`%s playing %s
 %s
-%d viewers; %.f FPS`, reply.Stream.Channel.Name, reply.Stream.Game, reply.Stream.Channel.Status, reply.Stream.Viewers, math.Floor(reply.Stream.AverageFps+0.5)), nil
+%d viewers; %dp @ %.f FPS`, reply.Stream.Channel.Name, reply.Stream.Game, reply.Stream.Channel.Status, reply.Stream.Viewers, reply.Stream.VideoHeight, math.Floor(reply.Stream.AverageFps+0.5)), nil
 }
 
 func help(chanId, authorId string, args []string) (string, error) {
@@ -310,12 +313,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if len(command) == 0 {
 			return
 		}
-		if command[0] != "upvote" && command[0] != "downvote" {
-			s.ChannelTyping(m.ChannelID)
-		}
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
+			if command[0] != "upvote" && command[0] != "downvote" {
+				s.ChannelTyping(m.ChannelID)
+			}
 			reply, err := cmd(m.ChannelID, m.Author.ID, command[1:])
 			if err != nil {
+				s.ChannelMessageSend(m.ChannelID, ":warning:")
 				fmt.Println("ERROR in " + command[0])
 				fmt.Printf("ARGS: %v\n", command[1:])
 				fmt.Println("ERROR: " + err.Error())
@@ -374,7 +378,17 @@ func main() {
 	client.AddHandler(makeMessageCreate())
 	client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 		fmt.Printf("VOICE: %s %s %s\n", v.UserID, v.SessionID, v.ChannelID)
-		if len(v.ChannelID) == 0 || v.UserID == OWN_USER_ID {
+		if len(v.ChannelID) == 0 && v.UserID == OWN_USER_ID {
+			currentVoiceChannel = ""
+			currentVoiceGuild = ""
+		}
+		if len(v.ChannelID) == 0 {
+			return
+		}
+		if v.UserID == OWN_USER_ID {
+			if len(currentVoiceChannel) > 0 && currentVoiceChannel != v.ChannelID {
+				s.ChannelVoiceJoin(currentVoiceGuild, currentVoiceChannel, true, false)
+			}
 			return
 		}
 		if rand.Intn(20) == 0 {
@@ -388,6 +402,8 @@ func main() {
 				fmt.Println(err.Error())
 				return
 			}
+			currentVoiceChannel = v.ChannelID
+			currentVoiceGuild = channel.GuildID
 			time.AfterFunc(time.Duration(rand.Int63n(1200)+600)*time.Second, func() {
 				err := s.ChannelVoiceLeave()
 				if err != nil {
