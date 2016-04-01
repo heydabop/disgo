@@ -376,7 +376,7 @@ func main() {
 		return
 	}
 	client.AddHandler(makeMessageCreate())
-	client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+	/*client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 		fmt.Printf("VOICE: %s %s %s\n", v.UserID, v.SessionID, v.ChannelID)
 		if len(v.ChannelID) == 0 && v.UserID == OWN_USER_ID {
 			currentVoiceChannel = ""
@@ -411,7 +411,7 @@ func main() {
 				}
 			})
 		}
-	})
+	})*/
 	client.AddHandler(func(s *discordgo.Session, t *discordgo.TypingStart) {
 		if t.UserID == OWN_USER_ID {
 			return
