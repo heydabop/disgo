@@ -41,14 +41,13 @@ type TwitchStreamReply struct {
 	Stream *TwitchStream `json:"stream"`
 }
 
-const OWN_USER_ID = "160807650345353226"
-
 var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
 var currentVoiceChannel = ""
 var currentVoiceGuild = ""
+var ownUserId = ""
 
 func spam(chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -101,7 +100,7 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	} else {
 		return "", errors.New("No valid mention found")
 	}
-	if authorId != OWN_USER_ID {
+	if authorId != ownUserId {
 		lastVoteTime, validTime := voteTime[authorId]
 		if validTime && time.Since(lastVoteTime).Minutes() < 5 {
 			return "Slow down champ.", nil
@@ -109,7 +108,7 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	}
 	if authorId == userId {
 		if inc > 0 {
-			_, err := vote(chanId, OWN_USER_ID, []string{"<@" + authorId + ">"}, -1)
+			_, err := vote(chanId, ownUserId, []string{"<@" + authorId + ">"}, -1)
 			if err != nil {
 				return "", err
 			}
@@ -250,7 +249,7 @@ func help(chanId, authorId string, args []string) (string, error) {
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
-	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + OWN_USER_ID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
+	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + ownUserId + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
@@ -280,7 +279,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println(err.Error())
 		}
 
-		if m.Author.ID == OWN_USER_ID {
+		if m.Author.ID == ownUserId {
 			return
 		}
 
@@ -375,17 +374,23 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	self, err := client.User("@me")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	ownUserId = self.ID
 	client.AddHandler(makeMessageCreate())
 	/*client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 		fmt.Printf("VOICE: %s %s %s\n", v.UserID, v.SessionID, v.ChannelID)
-		if len(v.ChannelID) == 0 && v.UserID == OWN_USER_ID {
+		if len(v.ChannelID) == 0 && v.UserID == ownUserId {
 			currentVoiceChannel = ""
 			currentVoiceGuild = ""
 		}
 		if len(v.ChannelID) == 0 {
 			return
 		}
-		if v.UserID == OWN_USER_ID {
+		if v.UserID == ownUserId {
 			if len(currentVoiceChannel) > 0 && currentVoiceChannel != v.ChannelID {
 				s.ChannelVoiceJoin(currentVoiceGuild, currentVoiceChannel, true, false)
 			}
@@ -413,7 +418,7 @@ func main() {
 		}
 	})*/
 	client.AddHandler(func(s *discordgo.Session, t *discordgo.TypingStart) {
-		if t.UserID == OWN_USER_ID {
+		if t.UserID == ownUserId {
 			return
 		}
 		if rand.Intn(20) == 0 {
