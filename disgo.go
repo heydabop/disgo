@@ -40,6 +40,10 @@ type TwitchStream struct {
 type TwitchStreamReply struct {
 	Stream *TwitchStream `json:"stream"`
 }
+type UserMessageCount struct {
+	AuthorId    string
+	NumMessages int64
+}
 
 var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
@@ -181,13 +185,10 @@ func votes(chanId, authorId string, args []string) (string, error) {
 			votes = append(votes, KarmaDto{userId, karma})
 		}
 		finalString := ""
-		for i, vote := range votes {
-			if i >= 5 {
-				break
-			}
+		for _, vote := range votes {
 			finalString += fmt.Sprintf("<@%s>: %d, ", vote.UserId, vote.Karma)
 		}
-		if len(finalString) > 0 {
+		if len(finalString) >= 2 {
 			return finalString[:len(finalString)-2], nil
 		} else {
 			return "", nil
@@ -244,8 +245,35 @@ func twitch(chanId, authorId string, args []string) (string, error) {
 %d viewers; %dp @ %.f FPS`, reply.Stream.Channel.Name, reply.Stream.Game, reply.Stream.Channel.Status, reply.Stream.Viewers, reply.Stream.VideoHeight, math.Floor(reply.Stream.AverageFps+0.5)), nil
 }
 
+func top(chanId, authorId string, args []string) (string, error) {
+	rows, err := sqlClient.Query("select AuthorId, count(AuthorId) as NumMessages from messages where ChanId = ? group by AuthorId order by count(AuthorId) desc limit 5", chanId)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	counts := make([]UserMessageCount, 0)
+	for rows.Next() {
+		var authorId string
+		var numMessages int64
+		err := rows.Scan(&authorId, &numMessages)
+		if err != nil {
+			return "", err
+		}
+		counts = append(counts, UserMessageCount{authorId, numMessages})
+	}
+	finalString := ""
+	for _, count := range counts {
+		finalString += fmt.Sprintf("<@%s>: %d, ", count.AuthorId, count.NumMessages)
+	}
+	if len(finalString) >= 2 {
+		return finalString[:len(finalString)-2], nil
+	} else {
+		return "", nil
+	}
+}
+
 func help(chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel]", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -266,6 +294,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"karma":    Command(votes),
 		"uptime":   Command(uptime),
 		"twitch":   Command(twitch),
+		"top":      Command(top),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
