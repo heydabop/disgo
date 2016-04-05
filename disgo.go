@@ -44,6 +44,10 @@ type UserMessageCount struct {
 	AuthorId    string
 	NumMessages int64
 }
+type UserMessageLength struct {
+	AuthorId  string
+	AvgLength float64
+}
 
 var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
@@ -290,8 +294,50 @@ func top(session *discordgo.Session, chanId, authorId string, args []string) (st
 	}
 }
 
+func topLength(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	var limit int
+	if len(args) < 1 {
+		limit = 5
+	} else {
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
+	//rows, err := sqlClient.Query(`select AuthorId, avg(length(message)) as avgLength from messages where ChanId = ? and trim(message) != '' and not message REGEXP '^https?:\/\/.*?\/[^[:space:]]*?$' group by AuthorId order by avgLength desc limit ?`, chanId, limit)
+	rows, err := sqlClient.Query(`select AuthorId, avg(length(message)) as avgLength from messages where ChanId = ? and trim(message) != '' group by AuthorId order by avgLength desc limit ?`, chanId, limit)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	avgLengths := make([]UserMessageLength, 0)
+	for rows.Next() {
+		var authorId string
+		var avgLength float64
+		err := rows.Scan(&authorId, &avgLength)
+		if err != nil {
+			return "", err
+		}
+		avgLengths = append(avgLengths, UserMessageLength{authorId, avgLength})
+	}
+	finalString := ""
+	for _, length := range avgLengths {
+		user, err := session.User(length.AuthorId)
+		if err != nil {
+			return "", err
+		}
+		finalString += fmt.Sprintf("%s: %.2f, ", user.Username, length.AvgLength)
+	}
+	if len(finalString) >= 2 {
+		return finalString[:len(finalString)-2], nil
+	} else {
+		return "", nil
+	}
+}
+
 func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top [number (optional)]", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -300,19 +346,20 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
 	funcMap := map[string]Command{
-		"spam":     Command(spam),
-		"soda":     Command(soda),
-		"lirik":    Command(lirik),
-		"forsen":   Command(forsen),
-		"roll":     Command(roll),
-		"help":     Command(help),
-		"upvote":   Command(upvote),
-		"downvote": Command(downvote),
-		"votes":    Command(votes),
-		"karma":    Command(votes),
-		"uptime":   Command(uptime),
-		"twitch":   Command(twitch),
-		"top":      Command(top),
+		"spam":      Command(spam),
+		"soda":      Command(soda),
+		"lirik":     Command(lirik),
+		"forsen":    Command(forsen),
+		"roll":      Command(roll),
+		"help":      Command(help),
+		"upvote":    Command(upvote),
+		"downvote":  Command(downvote),
+		"votes":     Command(votes),
+		"karma":     Command(votes),
+		"uptime":    Command(uptime),
+		"twitch":    Command(twitch),
+		"top":       Command(top),
+		"toplength": Command(topLength),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
