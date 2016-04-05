@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-type Command func(string, string, []string) (string, error)
+type Command func(*discordgo.Session, string, string, []string) (string, error)
 type KarmaDto struct {
 	UserId string
 	Karma  int64
@@ -53,7 +53,7 @@ var currentVoiceChannel = ""
 var currentVoiceGuild = ""
 var ownUserId = ""
 
-func spam(chanId, authorId string, args []string) (string, error) {
+func spam(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
 		cmd := exec.Command("find", "-iname", "*_nolink")
 		cmd.Dir = "/home/ross/markov/"
@@ -81,19 +81,19 @@ func spam(chanId, authorId string, args []string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func soda(chanId, authorId string, args []string) (string, error) {
-	return spam(chanId, authorId, []string{"sodapoppin"})
+func soda(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	return spam(session, chanId, authorId, []string{"sodapoppin"})
 }
 
-func lirik(chanId, authorId string, args []string) (string, error) {
-	return spam(chanId, authorId, []string{"lirik"})
+func lirik(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	return spam(session, chanId, authorId, []string{"lirik"})
 }
 
-func forsen(chanId, authorId string, args []string) (string, error) {
-	return spam(chanId, authorId, []string{"forsenlol"})
+func forsen(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	return spam(session, chanId, authorId, []string{"forsenlol"})
 }
 
-func vote(chanId, authorId string, args []string, inc int64) (string, error) {
+func vote(session *discordgo.Session, chanId, authorId string, args []string, inc int64) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No userId provided")
 	}
@@ -112,7 +112,7 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	}
 	if authorId == userId {
 		if inc > 0 {
-			_, err := vote(chanId, ownUserId, []string{"<@" + authorId + ">"}, -1)
+			_, err := vote(session, chanId, ownUserId, []string{"<@" + authorId + ">"}, -1)
 			if err != nil {
 				return "", err
 			}
@@ -145,15 +145,15 @@ func vote(chanId, authorId string, args []string, inc int64) (string, error) {
 	return "", nil
 }
 
-func upvote(chanId, authorId string, args []string) (string, error) {
-	return vote(chanId, authorId, args, 1)
+func upvote(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	return vote(session, chanId, authorId, args, 1)
 }
 
-func downvote(chanId, authorId string, args []string) (string, error) {
-	return vote(chanId, authorId, args, -1)
+func downvote(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	return vote(session, chanId, authorId, args, -1)
 }
 
-func votes(chanId, authorId string, args []string) (string, error) {
+func votes(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	if len(args) > 0 {
 		var userId string
 		fmt.Println(args[0])
@@ -186,7 +186,11 @@ func votes(chanId, authorId string, args []string) (string, error) {
 		}
 		finalString := ""
 		for _, vote := range votes {
-			finalString += fmt.Sprintf("<@%s>: %d, ", vote.UserId, vote.Karma)
+			user, err := session.User(vote.UserId)
+			if err != nil {
+				return "", err
+			}
+			finalString += fmt.Sprintf("%s: %d, ", user.Username, vote.Karma)
 		}
 		if len(finalString) >= 2 {
 			return finalString[:len(finalString)-2], nil
@@ -196,7 +200,7 @@ func votes(chanId, authorId string, args []string) (string, error) {
 	}
 }
 
-func roll(chanId, authorId string, args []string) (string, error) {
+func roll(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	var max int
 	if len(args) < 1 {
 		max = 6
@@ -210,7 +214,7 @@ func roll(chanId, authorId string, args []string) (string, error) {
 	return strconv.Itoa(rand.Intn(max) + 1), nil
 }
 
-func uptime(chanId, authorId string, args []string) (string, error) {
+func uptime(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	output, err := exec.Command("uptime").Output()
 	if err != nil {
 		return "", nil
@@ -218,7 +222,7 @@ func uptime(chanId, authorId string, args []string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-func twitch(chanId, authorId string, args []string) (string, error) {
+func twitch(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No stream provided")
 	}
@@ -245,8 +249,18 @@ func twitch(chanId, authorId string, args []string) (string, error) {
 %d viewers; %dp @ %.f FPS`, reply.Stream.Channel.Name, reply.Stream.Game, reply.Stream.Channel.Status, reply.Stream.Viewers, reply.Stream.VideoHeight, math.Floor(reply.Stream.AverageFps+0.5)), nil
 }
 
-func top(chanId, authorId string, args []string) (string, error) {
-	rows, err := sqlClient.Query("select AuthorId, count(AuthorId) as NumMessages from messages where ChanId = ? group by AuthorId order by count(AuthorId) desc limit 5", chanId)
+func top(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	var limit int
+	if len(args) < 1 {
+		limit = 5
+	} else {
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
+	rows, err := sqlClient.Query("select AuthorId, count(AuthorId) as NumMessages from messages where ChanId = ? group by AuthorId order by count(AuthorId) desc limit ?", chanId, limit)
 	if err != nil {
 		return "", err
 	}
@@ -263,7 +277,11 @@ func top(chanId, authorId string, args []string) (string, error) {
 	}
 	finalString := ""
 	for _, count := range counts {
-		finalString += fmt.Sprintf("<@%s>: %d, ", count.AuthorId, count.NumMessages)
+		user, err := session.User(count.AuthorId)
+		if err != nil {
+			return "", err
+		}
+		finalString += fmt.Sprintf("%s: %d, ", user.Username, count.NumMessages)
 	}
 	if len(finalString) >= 2 {
 		return finalString[:len(finalString)-2], nil
@@ -272,8 +290,8 @@ func top(chanId, authorId string, args []string) (string, error) {
 	}
 }
 
-func help(chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top", nil
+func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top [number (optional)]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -345,7 +363,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			if command[0] != "upvote" && command[0] != "downvote" {
 				s.ChannelTyping(m.ChannelID)
 			}
-			reply, err := cmd(m.ChannelID, m.Author.ID, command[1:])
+			reply, err := cmd(s, m.ChannelID, m.Author.ID, command[1:])
 			if err != nil {
 				s.ChannelMessageSend(m.ChannelID, ":warning:")
 				fmt.Println("ERROR in " + command[0])
