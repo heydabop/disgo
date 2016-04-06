@@ -171,49 +171,43 @@ func downvote(session *discordgo.Session, chanId, authorId string, args []string
 }
 
 func votes(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
-	if len(args) > 0 {
-		var userId string
-		fmt.Println(args[0])
-		if match := userIdRegex.FindStringSubmatch(args[0]); match != nil {
-			userId = match[1]
-		} else {
-			return "", errors.New("No valid mention found")
-		}
-		var karma int64
-		err := sqlClient.QueryRow("select Karma from karma where ChanId = ? and UserId = ?", chanId, userId).Scan(&karma)
-		if err != nil {
-			return "", err
-		}
-		return strconv.FormatInt(karma, 10), nil
+	var limit int
+	if len(args) < 1 {
+		limit = 5
 	} else {
-		rows, err := sqlClient.Query("select UserId, Karma from karma where ChanId = ? order by Karma desc limit 5", chanId)
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
+	rows, err := sqlClient.Query("select UserId, Karma from karma where ChanId = ? order by Karma desc limit ?", chanId, limit)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	votes := make([]KarmaDto, 0)
+	for rows.Next() {
+		var userId string
+		var karma int64
+		err := rows.Scan(&userId, &karma)
 		if err != nil {
 			return "", err
 		}
-		defer rows.Close()
-		votes := make([]KarmaDto, 0)
-		for rows.Next() {
-			var userId string
-			var karma int64
-			err := rows.Scan(&userId, &karma)
-			if err != nil {
-				return "", err
-			}
-			votes = append(votes, KarmaDto{userId, karma})
+		votes = append(votes, KarmaDto{userId, karma})
+	}
+	finalString := ""
+	for _, vote := range votes {
+		user, err := session.User(vote.UserId)
+		if err != nil {
+			return "", err
 		}
-		finalString := ""
-		for _, vote := range votes {
-			user, err := session.User(vote.UserId)
-			if err != nil {
-				return "", err
-			}
-			finalString += fmt.Sprintf("%s: %d, ", user.Username, vote.Karma)
-		}
-		if len(finalString) >= 2 {
-			return finalString[:len(finalString)-2], nil
-		} else {
-			return "", nil
-		}
+		finalString += fmt.Sprintf("%s: %d, ", user.Username, vote.Karma)
+	}
+	if len(finalString) >= 2 {
+		return finalString[:len(finalString)-2], nil
+	} else {
+		return "", nil
 	}
 }
 
