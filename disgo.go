@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -47,6 +48,18 @@ type UserMessageCount struct {
 type UserMessageLength struct {
 	AuthorId  string
 	AvgLength float64
+}
+
+type UserMessageLengths []UserMessageLength
+
+func (u UserMessageLengths) Len() int {
+	return len(u)
+}
+func (u UserMessageLengths) Less(i, j int) bool {
+	return u[i].AvgLength-u[j].AvgLength > 0
+}
+func (u UserMessageLengths) Swap(i, j int) {
+	u[i], u[j] = u[j], u[i]
 }
 
 var sqlClient *sql.DB
@@ -305,24 +318,37 @@ func topLength(session *discordgo.Session, chanId, authorId string, args []strin
 			return "", err
 		}
 	}
-	//rows, err := sqlClient.Query(`select AuthorId, avg(length(message)) as avgLength from messages where ChanId = ? and trim(message) != '' and not message REGEXP '^https?:\/\/.*?\/[^[:space:]]*?$' group by AuthorId order by avgLength desc limit ?`, chanId, limit)
-	rows, err := sqlClient.Query(`select AuthorId, avg(length(message)) as avgLength from messages where ChanId = ? and trim(message) != '' group by AuthorId order by avgLength desc limit ?`, chanId, limit)
+	rows, err := sqlClient.Query(`select AuthorId, Message from messages where ChanId = ? and trim(message) != ''`, chanId)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
-	avgLengths := make([]UserMessageLength, 0)
-	for rows.Next() {
+	messagesPerUser := make(map[string]uint)
+	wordsPerUser := make(map[string]uint)
+	urlRegex := regexp.MustCompile(`^https?:\/\/.*?\/[^[:space:]]*?$`)
+	for i := 0; rows.Next(); i++ {
 		var authorId string
-		var avgLength float64
-		err := rows.Scan(&authorId, &avgLength)
+		var message string
+		err := rows.Scan(&authorId, &message)
 		if err != nil {
 			return "", err
 		}
-		avgLengths = append(avgLengths, UserMessageLength{authorId, avgLength})
+		if urlRegex.MatchString(message) {
+			continue
+		}
+		messagesPerUser[authorId]++
+		wordsPerUser[authorId] += uint(len(strings.Fields(message)))
 	}
+	avgLengths := make(UserMessageLengths, 0)
+	for userId, numMessages := range messagesPerUser {
+		avgLengths = append(avgLengths, UserMessageLength{userId, float64(wordsPerUser[userId]) / float64(numMessages)})
+	}
+	sort.Sort(&avgLengths)
 	finalString := ""
-	for _, length := range avgLengths {
+	for i, length := range avgLengths {
+		if i >= limit {
+			break
+		}
 		user, err := session.User(length.AuthorId)
 		if err != nil {
 			return "", err
