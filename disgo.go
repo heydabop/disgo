@@ -362,8 +362,48 @@ func topLength(session *discordgo.Session, chanId, authorId string, args []strin
 	}
 }
 
+func rename(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No new username provided")
+	}
+	newUsername := strings.Join(args[0:], " ")
+	var timestamp string
+	now := time.Now()
+	err := sqlClient.QueryRow("select Timestamp from OwnUsername order by Timestamp desc limit 1").Scan(&timestamp)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			timestamp = now.Add(-48 * time.Hour).Format(time.RFC3339Nano)
+		} else {
+			return "", err
+		}
+	}
+	lastChangeTime, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		return "", err
+	}
+	minutes := rand.Intn(180) + 1350
+	if now.After(lastChangeTime.Add(time.Duration(minutes) * time.Minute)) {
+		self, err := session.User("@me")
+		if err != nil {
+			return "", err
+		}
+		newSelf, err := session.UserUpdate(LOGIN_EMAIL, LOGIN_PASSWORD, newUsername, self.Avatar, LOGIN_PASSWORD)
+		if err != nil {
+			return "", err
+		}
+		_, err = sqlClient.Exec("INSERT INTO ownUsername (AuthorId, Timestamp, Username) values (?, ?, ?)",
+			authorId, now.Format(time.RFC3339Nano), newSelf.Username)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		return "I'm not ready to change who I am.", nil
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)]", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -386,6 +426,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"twitch":    Command(twitch),
 		"top":       Command(top),
 		"toplength": Command(topLength),
+		"rename":    Command(rename),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -438,7 +479,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, command[1:])
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, ":warning:")
+				s.ChannelMessageSend(m.ChannelID, ":warning: `"+err.Error()+"`")
 				fmt.Println("ERROR in " + command[0])
 				fmt.Printf("ARGS: %v\n", command[1:])
 				fmt.Println("ERROR: " + err.Error())
