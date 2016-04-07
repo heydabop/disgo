@@ -361,32 +361,25 @@ func rename(session *discordgo.Session, chanId, authorId string, args []string) 
 		return "", errors.New("No new username provided")
 	}
 	newUsername := strings.Join(args[0:], " ")
-	var lastAuthorId, timestamp string
+	var timestamp string
+	var lockedMinutes int
+	var lastChangeTime time.Time
 	now := time.Now()
-	err := sqlClient.QueryRow("select AuthorId, Timestamp from OwnUsername order by Timestamp desc limit 1").Scan(&lastAuthorId, &timestamp)
+	err := sqlClient.QueryRow("select Timestamp, LockedMinutes from OwnUsername order by Timestamp desc limit 1").Scan(&timestamp, &lockedMinutes)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			timestamp = now.Add(-48 * time.Hour).Format(time.RFC3339Nano)
+			lockedMinutes = 0
 		} else {
 			return "", err
 		}
-	}
-	lastChangeTime, err := time.Parse(time.RFC3339Nano, timestamp)
-	if err != nil {
-		return "", err
-	}
-
-	var authorKarma int
-	err = sqlClient.QueryRow("select Karma from karma where ChanId = ? and UserId = ?", chanId, lastAuthorId).Scan(&authorKarma)
-	if err != nil {
-		authorKarma = 0
+	} else {
+		lastChangeTime, err = time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			lastChangeTime = time.Now()
+		}
 	}
 
-	minutes := rand.Intn(30) + 45 + 10*authorKarma
-	if minutes < 1 {
-		minutes = 1
-	}
-	if now.After(lastChangeTime.Add(time.Duration(minutes) * time.Minute)) {
+	if lockedMinutes == 0 || now.After(lastChangeTime.Add(time.Duration(lockedMinutes)*time.Minute)) {
 		self, err := session.User("@me")
 		if err != nil {
 			return "", err
@@ -395,10 +388,30 @@ func rename(session *discordgo.Session, chanId, authorId string, args []string) 
 		if err != nil {
 			return "", err
 		}
-		_, err = sqlClient.Exec("INSERT INTO ownUsername (AuthorId, Timestamp, Username) values (?, ?, ?)",
-			authorId, now.Format(time.RFC3339Nano), newSelf.Username)
+
+		var authorKarma int
+		err = sqlClient.QueryRow("select Karma from karma where ChanId = ? and UserId = ?", chanId, authorId).Scan(&authorKarma)
+		if err != nil {
+			authorKarma = 0
+		}
+		newLockedMinutes := rand.Intn(30) + 45 + 10*authorKarma
+		if newLockedMinutes < 30 {
+			newLockedMinutes = 30
+		}
+
+		_, err = sqlClient.Exec("INSERT INTO ownUsername (AuthorId, Timestamp, Username, LockedMinutes) values (?, ?, ?, ?)",
+			authorId, now.Format(time.RFC3339Nano), newSelf.Username, newLockedMinutes)
 		if err != nil {
 			return "", err
+		}
+		author, err := session.User(authorId)
+		if err != nil {
+			return "", err
+		}
+		if authorKarma > 0 {
+			return fmt.Sprintf("%s's name change will last for an extra %d minutes thanks to their karma!", author.Username, 10*authorKarma), nil
+		} else if authorKarma < 0 {
+			return fmt.Sprintf("%s's name change will last up to %d minutes less due to their karma...", author.Username, -10*authorKarma), nil
 		}
 	} else {
 		return "I'm not ready to change who I am.", nil
