@@ -361,9 +361,9 @@ func rename(session *discordgo.Session, chanId, authorId string, args []string) 
 		return "", errors.New("No new username provided")
 	}
 	newUsername := strings.Join(args[0:], " ")
-	var timestamp string
+	var lastAuthorId, timestamp string
 	now := time.Now()
-	err := sqlClient.QueryRow("select Timestamp from OwnUsername order by Timestamp desc limit 1").Scan(&timestamp)
+	err := sqlClient.QueryRow("select AuthorId, Timestamp from OwnUsername order by Timestamp desc limit 1").Scan(&lastAuthorId, &timestamp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			timestamp = now.Add(-48 * time.Hour).Format(time.RFC3339Nano)
@@ -375,13 +375,23 @@ func rename(session *discordgo.Session, chanId, authorId string, args []string) 
 	if err != nil {
 		return "", err
 	}
-	minutes := rand.Intn(180) + 1350
+
+	var authorKarma int
+	err = sqlClient.QueryRow("select Karma from karma where ChanId = ? and UserId = ?", chanId, lastAuthorId).Scan(&authorKarma)
+	if err != nil {
+		authorKarma = 0
+	}
+
+	minutes := rand.Intn(30) + 45 + 10*authorKarma
+	if minutes < 1 {
+		minutes = 1
+	}
 	if now.After(lastChangeTime.Add(time.Duration(minutes) * time.Minute)) {
 		self, err := session.User("@me")
 		if err != nil {
 			return "", err
 		}
-		newSelf, err := session.UserUpdate(LOGIN_EMAIL, LOGIN_PASSWORD, newUsername, self.Avatar, LOGIN_PASSWORD)
+		newSelf, err := session.UserUpdate(LOGIN_EMAIL, LOGIN_PASSWORD, newUsername, self.Avatar, "")
 		if err != nil {
 			return "", err
 		}
@@ -397,7 +407,7 @@ func rename(session *discordgo.Session, chanId, authorId string, args []string) 
 }
 
 func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [@user (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username]", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
