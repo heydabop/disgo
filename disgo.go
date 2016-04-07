@@ -440,7 +440,7 @@ func lastseen(session *discordgo.Session, chanId, authorId string, args []string
 		return fmt.Sprintf("%s is currently online", user.Username), nil
 	}
 	lastOnlineStr := ""
-	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and Presence = 'offline' order by Timestamp desc limit 1", guild.ID, userId).Scan(&lastOnlineStr)
+	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and (Presence = 'offline' or Presence = 'idle') order by Timestamp desc limit 1", guild.ID, userId).Scan(&lastOnlineStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("I've never seen %s", user.Username), nil
@@ -468,7 +468,7 @@ func lastseen(session *discordgo.Session, chanId, authorId string, args []string
 }
 
 func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username]", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username], lastseen [@user]", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -602,7 +602,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 		fmt.Println("ERROR getting user")
 		fmt.Println(err.Error())
 	} else {
-		fmt.Printf("%20s %20s %20s > %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
+		fmt.Printf("%20s %20s %20s : %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
 	}
 	_, err = sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", p.GuildID, p.User.ID, now.Format(time.RFC3339Nano), p.Status, gameName)
 	if err != nil {
