@@ -69,6 +69,8 @@ var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
 var currentVoiceChannel = ""
 var currentVoiceGuild = ""
 var ownUserId = ""
+var lastMessage discordgo.Message
+var lastAuthorId = ""
 
 func spam(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -480,8 +482,18 @@ func lastseen(session *discordgo.Session, chanId, authorId string, args []string
 	return fmt.Sprintf("%s was last seen %s", user.Username, lastSeenStr), nil
 }
 
+func deleteLastMessage(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	if lastAuthorId == authorId {
+		err := session.ChannelMessageDelete(lastMessage.ChannelID, lastMessage.ID)
+		if err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username], lastseen [@user]", nil
+	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username], lastseen [@user], delete", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
@@ -506,6 +518,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"toplength": Command(topLength),
 		"rename":    Command(rename),
 		"lastseen":  Command(lastseen),
+		"delete":    Command(deleteLastMessage),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -565,7 +578,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				return
 			}
 			if len(reply) > 0 {
-				s.ChannelMessageSend(m.ChannelID, reply)
+				message, err := s.ChannelMessageSend(m.ChannelID, reply)
+				if err != nil {
+					fmt.Println("ERROR sending message: " + err.Error())
+					return
+				}
+				lastMessage = *message
+				lastAuthorId = m.Author.ID
 			}
 			return
 		}
