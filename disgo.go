@@ -406,6 +406,67 @@ func rename(session *discordgo.Session, chanId, authorId string, args []string) 
 	return "", nil
 }
 
+func lastseen(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No userId provided")
+	}
+	userMention := args[0]
+	var userId string
+	if match := userIdRegex.FindStringSubmatch(userMention); match != nil {
+		userId = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+	user, err := session.User(userId)
+	if err != nil {
+		return "", err
+	}
+	channel, err := session.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	guild, err := session.Guild(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	online := false
+	for _, presence := range guild.Presences {
+		if presence.User != nil && presence.User.ID == user.ID {
+			online = presence.Status == "online"
+			break
+		}
+	}
+	if online {
+		return fmt.Sprintf("%s is currently online", user.Username), nil
+	}
+	lastOnlineStr := ""
+	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and Presence = 'offline' order by Timestamp desc limit 1", guild.ID, userId).Scan(&lastOnlineStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Sprintf("I've never seen %s", user.Username), nil
+		}
+		return "", err
+	}
+	lastOnline, err := time.Parse(time.RFC3339Nano, lastOnlineStr)
+	if err != nil {
+		return "", err
+	}
+	timeSince := time.Since(lastOnline)
+	lastSeenStr := ""
+	if timeSince <= 1*time.Second {
+		lastSeenStr = "less than a second ago"
+	} else if timeSince < 120*time.Second {
+		lastSeenStr = fmt.Sprintf("%.f seconds ago", timeSince.Seconds())
+	} else if timeSince < 120*time.Minute {
+		lastSeenStr = fmt.Sprintf("%.f minutes ago", timeSince.Minutes())
+	} else if timeSince < 48*time.Hour {
+		lastSeenStr = fmt.Sprintf("%.f hours ago", timeSince.Hours())
+	} else {
+		lastSeenStr = fmt.Sprintf("%.f days ago", timeSince.Hours()/24)
+	}
+	return fmt.Sprintf("%s was last seen %s", user.Username, lastSeenStr), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId string, args []string) (string, error) {
 	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username]", nil
 }
@@ -431,6 +492,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"top":       Command(top),
 		"toplength": Command(topLength),
 		"rename":    Command(rename),
+		"lastseen":  Command(lastseen),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -526,6 +588,29 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 	}
 }
 
+func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
+	now := time.Now()
+	if p.User == nil {
+		return
+	}
+	gameName := ""
+	if p.Game != nil {
+		gameName = p.Game.Name
+	}
+	user, err := s.User(p.User.ID)
+	if err != nil {
+		fmt.Println("ERROR getting user")
+		fmt.Println(err.Error())
+	} else {
+		fmt.Printf("%20s %20s %20s > %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
+	}
+	_, err = sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", p.GuildID, p.User.ID, now.Format(time.RFC3339Nano), p.Status, gameName)
+	if err != nil {
+		fmt.Println("ERROR insert into UserPresence DB")
+		fmt.Println(err.Error())
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -546,47 +631,12 @@ func main() {
 	}
 	ownUserId = self.ID
 	client.AddHandler(makeMessageCreate())
-	/*client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-		fmt.Printf("VOICE: %s %s %s\n", v.UserID, v.SessionID, v.ChannelID)
-		if len(v.ChannelID) == 0 && v.UserID == ownUserId {
-			currentVoiceChannel = ""
-			currentVoiceGuild = ""
-		}
-		if len(v.ChannelID) == 0 {
-			return
-		}
-		if v.UserID == ownUserId {
-			if len(currentVoiceChannel) > 0 && currentVoiceChannel != v.ChannelID {
-				s.ChannelVoiceJoin(currentVoiceGuild, currentVoiceChannel, true, false)
-			}
-			return
-		}
-		if rand.Intn(20) == 0 {
-			channel, err := s.Channel(v.ChannelID)
-			if err != nil {
-				fmt.Println(err.Error())
-				return
-			}
-			err = s.ChannelVoiceJoin(channel.GuildID, v.ChannelID, true, false)
-			if err != nil {
-				fmt.Println(err.Error())
-				return
-			}
-			currentVoiceChannel = v.ChannelID
-			currentVoiceGuild = channel.GuildID
-			time.AfterFunc(time.Duration(rand.Int63n(1200)+600)*time.Second, func() {
-				err := s.ChannelVoiceLeave()
-				if err != nil {
-					fmt.Println(err.Error())
-				}
-			})
-		}
-	})*/
+	client.AddHandler(handlePresenceUpdate)
 	client.AddHandler(func(s *discordgo.Session, t *discordgo.TypingStart) {
 		if t.UserID == ownUserId {
 			return
 		}
-		if rand.Intn(20) == 0 {
+		if _, timerExists := typingTimer[t.UserID]; !timerExists && rand.Intn(20) == 0 {
 			typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
 				responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
 				responseId := rand.Intn(len(responses))
