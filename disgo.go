@@ -145,7 +145,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 	}
 
 	var lastVoterIdAgainstUser string
-	err = sqlClient.QueryRow("select VoterId where GuildId = ? and VoteeId = ? order by Timestamp desc limit 1", channel.GuildID, authorId).Scan(&lastVoterIdAgainstUser)
+	err = sqlClient.QueryRow("select VoterId from Vote where GuildId = ? and VoteeId = ? order by Timestamp desc limit 1", channel.GuildID, authorId).Scan(&lastVoterIdAgainstUser)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			lastVoterIdAgainstUser = ""
