@@ -125,7 +125,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 	}
 	if authorId != ownUserId {
 		lastVoteTime, validTime := voteTime[authorId]
-		if validTime && time.Since(lastVoteTime).Minutes() < 5 {
+		if validTime && time.Since(lastVoteTime).Minutes() < 5+5*rand.Float64() {
 			return "Slow down champ.", nil
 		}
 	}
@@ -139,11 +139,24 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 		}
 		return "No.", nil
 	}
-
 	channel, err := session.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
+
+	var lastVoterIdAgainstUser string
+	err = sqlClient.QueryRow("select VoterId where GuildId = ? and VoteeId = ? order by Timestamp desc limit 1", channel.GuildID, authorId).Scan(&lastVoterIdAgainstUser)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			lastVoterIdAgainstUser = ""
+		} else {
+			return "", err
+		}
+	}
+	if lastVoterIdAgainstUser == userId {
+		return "Really?...", nil
+	}
+
 	var karma int64
 	err = sqlClient.QueryRow("select Karma from UserKarma where GuildId = ? and UserId = ?", channel.GuildID, userId).Scan(&karma)
 	if err != nil {
