@@ -144,16 +144,39 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 		return "", err
 	}
 
-	var lastVoterIdAgainstUser string
-	err = sqlClient.QueryRow("select VoterId from Vote where GuildId = ? and VoteeId = ? order by Timestamp desc limit 1", channel.GuildID, authorId).Scan(&lastVoterIdAgainstUser)
+	var lastVoterIdAgainstUser, lastVoteTimestamp string
+	var lastVoteTime time.Time
+	err = sqlClient.QueryRow("select VoterId, Timestamp from Vote where GuildId = ? and VoteeId = ? order by Timestamp desc limit 1", channel.GuildID, authorId).Scan(&lastVoterIdAgainstUser, &lastVoteTimestamp)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			lastVoterIdAgainstUser = ""
 		} else {
 			return "", err
 		}
+	} else {
+		lastVoteTime, err = time.Parse(time.RFC3339Nano, lastVoteTimestamp)
+		if err != nil {
+			return "", err
+		}
 	}
-	if lastVoterIdAgainstUser == userId {
+	if lastVoterIdAgainstUser == userId && time.Since(lastVoteTime).Hours() < 18 {
+		return "Really?...", nil
+	}
+	var lastVoteeIdFromAuthor string
+	err = sqlClient.QueryRow("select VoteeId, Timestamp from Vote where GuildId = ? and VoterId = ? order by Timestamp desc limit 1", channel.GuildID, authorId).Scan(&lastVoteeIdFromAuthor, &lastVoteTimestamp)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			lastVoteeIdFromAuthor = ""
+		} else {
+			return "", err
+		}
+	} else {
+		lastVoteTime, err = time.Parse(time.RFC3339Nano, lastVoteTimestamp)
+		if err != nil {
+			return "", err
+		}
+	}
+	if lastVoteeIdFromAuthor == userId && time.Since(lastVoteTime).Hours() < 18 {
 		return "Really?...", nil
 	}
 
@@ -532,7 +555,29 @@ func deleteLastMessage(session *discordgo.Session, chanId, authorId, messageId s
 }
 
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
-	return "spam [streamer (optional)], soda, lirik, forsen, roll [sides (optional)], upvote [@user] (or @user++), downvote [@user] (or @user--), karma/votes [number (optional), uptime, twitch [channel], top [number (optional)], topLength [number (optional)], rename [new username], lastseen [@user], delete", nil
+	privateChannel, err := session.UserChannelCreate(authorId)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, `delete
+downvote [@user] (or @user--)
+forsen
+karma/votes [number (optional)
+lastseen [@user]
+lirik
+rename [new username]
+roll [sides (optional)]
+spam [streamer (optional)]
+soda
+top [number (optional)]
+topLength [number (optional)]
+twitch [channel]
+uptime
+upvote [@user] (or @user++)`)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
