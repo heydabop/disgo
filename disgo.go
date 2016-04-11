@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
+	"github.com/gyuho/goling/similar"
 	_ "github.com/mattn/go-sqlite3"
 	"io/ioutil"
 	"math"
@@ -71,6 +72,47 @@ var currentVoiceGuild = ""
 var ownUserId = ""
 var lastMessage discordgo.Message
 var lastAuthorId = ""
+
+func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
+	channel, err := session.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	guild, err := session.Guild(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	similarUsers := make([]discordgo.User, 0)
+	lowerUsername := strings.ToLower(username)
+	if guild.Members != nil {
+		for _, member := range guild.Members {
+			if user := member.User; user != nil {
+				if strings.Contains(strings.ToLower(user.Username), lowerUsername) {
+					similarUsers = append(similarUsers, *user)
+				}
+			}
+		}
+	}
+	if len(similarUsers) == 0 {
+		return "", errors.New("No similar user found")
+	} else if len(similarUsers) == 1 {
+		return similarUsers[0].ID, nil
+	}
+	maxSim := 0.0
+	maxUserId := ""
+	usernameBytes := []byte(lowerUsername)
+	for _, user := range similarUsers {
+		sim := similar.Cosine([]byte(strings.ToLower(user.Username)), usernameBytes)
+		if sim > maxSim {
+			maxSim = sim
+			maxUserId = user.ID
+		}
+	}
+	if maxUserId == "" {
+		return "", errors.New("No similar user found")
+	}
+	return maxUserId, nil
+}
 
 func spam(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -489,14 +531,11 @@ func rename(session *discordgo.Session, chanId, authorId, messageId string, args
 
 func lastseen(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	if len(args) < 1 {
-		return "", errors.New("No userId provided")
+		return "", errors.New("No username provided")
 	}
-	userMention := args[0]
-	var userId string
-	if match := userIdRegex.FindStringSubmatch(userMention); match != nil {
-		userId = match[1]
-	} else {
-		return "", errors.New("No valid mention found")
+	userId, err := getMostSimilarUserId(session, chanId, strings.Join(args, " "))
+	if err != nil {
+		return "", err
 	}
 	user, err := session.User(userId)
 	if err != nil {
@@ -574,14 +613,15 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if len(args) < 1 {
 		return "", errors.New("No userId provided")
 	}
-	userMention := args[0]
-	var userId string
-	if match := userIdRegex.FindStringSubmatch(userMention); match != nil {
-		userId = match[1]
-	} else {
-		return "", errors.New("No valid mention found")
+	userId, err := getMostSimilarUserId(session, chanId, strings.Join(args, " "))
+	if err != nil {
+		return "", err
 	}
-	err := exec.Command("bash", "./gen_custom_log.sh", chanId, userId).Run()
+	user, err := session.User(userId)
+	if err != nil {
+		return "", err
+	}
+	err = exec.Command("bash", "./gen_custom_log.sh", chanId, userId).Run()
 	if err != nil {
 		return "", err
 	}
@@ -595,7 +635,7 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	return fmt.Sprintf("%s: %s", user.Username, strings.TrimSpace(string(out))), nil
 }
 
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -608,12 +648,12 @@ delete
 downvote [@user] (or @user--)
 forsen
 karma/votes [number (optional)
-lastseen [@user]
+lastseen [username]
 lirik
 rename [new username]
 roll [sides (optional)]
 spam [streamer (optional)]
-spamuser [@user]
+spamuser [username]
 soda
 top [number (optional)]
 topLength [number (optional)]
@@ -797,6 +837,8 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	defer client.Close()
+	defer client.Logout()
 	self, err := client.User("@me")
 	if err != nil {
 		fmt.Println(err)
