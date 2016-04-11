@@ -112,6 +112,10 @@ func forsen(session *discordgo.Session, chanId, authorId, messageId string, args
 	return spam(session, chanId, authorId, messageId, []string{"forsenlol"})
 }
 
+func cwc(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	return spam(session, chanId, authorId, messageId, []string{"cwc2016"})
+}
+
 func vote(session *discordgo.Session, chanId, authorId, messageId string, args []string, inc int64) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No userId provided")
@@ -554,12 +558,53 @@ func deleteLastMessage(session *discordgo.Session, chanId, authorId, messageId s
 	return "", nil
 }
 
+func kickme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	channel, err := session.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	err = session.GuildMemberDelete(channel.GuildID, authorId)
+	if err != nil {
+		return "", err
+	}
+	return "See ya nerd.", nil
+}
+
+func spamuser(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No userId provided")
+	}
+	userMention := args[0]
+	var userId string
+	if match := userIdRegex.FindStringSubmatch(userMention); match != nil {
+		userId = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+	err := exec.Command("bash", "./gen_custom_log.sh", chanId, userId).Run()
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
+	logs, err := os.Open("/home/ross/markov/" + userId + "_custom")
+	if err != nil {
+		return "", err
+	}
+	cmd.Stdin = logs
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `delete
+	_, err = session.ChannelMessageSend(privateChannel.ID, `cwc
+delete
 downvote [@user] (or @user--)
 forsen
 karma/votes [number (optional)
@@ -568,6 +613,7 @@ lirik
 rename [new username]
 roll [sides (optional)]
 spam [streamer (optional)]
+spamuser [@user]
 soda
 top [number (optional)]
 topLength [number (optional)]
@@ -603,6 +649,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"rename":    Command(rename),
 		"lastseen":  Command(lastseen),
 		"delete":    Command(deleteLastMessage),
+		"cwc":       Command(cwc),
+		"kickme":    Command(kickme),
+		"spamuser":  Command(spamuser),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -691,7 +740,7 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 		select {
 		case <-ticker:
 			if currentGame != "" {
-				changeGame := rand.Intn(2)
+				changeGame := rand.Intn(3)
 				if changeGame != 0 {
 					continue
 				}
