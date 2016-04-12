@@ -93,9 +93,7 @@ func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (
 			}
 		}
 	}
-	if len(similarUsers) == 0 {
-		return "", errors.New("No similar user found")
-	} else if len(similarUsers) == 1 {
+	if len(similarUsers) == 1 {
 		return similarUsers[0].ID, nil
 	}
 	maxSim := 0.0
@@ -106,6 +104,22 @@ func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (
 		if sim > maxSim {
 			maxSim = sim
 			maxUserId = user.ID
+		}
+	}
+	if maxUserId != "" {
+		return maxUserId, nil
+	}
+	maxSim = 0.0
+	maxUserId = ""
+	if guild.Members != nil {
+		for _, member := range guild.Members {
+			if user := member.User; user != nil {
+				sim := similar.Cosine([]byte(strings.ToLower(user.Username)), usernameBytes)
+				if sim > maxSim {
+					maxSim = sim
+					maxUserId = user.ID
+				}
+			}
 		}
 	}
 	if maxUserId == "" {
@@ -377,7 +391,7 @@ func top(session *discordgo.Session, chanId, authorId, messageId string, args []
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query("select AuthorId, count(AuthorId) as NumMessages from Message where ChanId = ? group by AuthorId order by count(AuthorId) desc limit ?", chanId, limit)
+	rows, err := sqlClient.Query(`select AuthorId, count(AuthorId) as NumMessages from Message where ChanId = ? and Content not like '/%' group by AuthorId order by count(AuthorId) desc limit ?`, chanId, limit)
 	if err != nil {
 		return "", err
 	}
@@ -418,7 +432,7 @@ func topLength(session *discordgo.Session, chanId, authorId, messageId string, a
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`select AuthorId, Content from Message where ChanId = ? and trim(Content) != ''`, chanId)
+	rows, err := sqlClient.Query(`select AuthorId, Content from Message where ChanId = ? and Content not like '/%' and trim(Content) != ''`, chanId)
 	if err != nil {
 		return "", err
 	}
@@ -635,7 +649,7 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s: %s", user.Username, strings.TrimSpace(string(out))), nil
+	return fmt.Sprintf("%s\n%s", user.Username, strings.TrimSpace(string(out))), nil
 }
 
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
