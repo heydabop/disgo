@@ -649,7 +649,17 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s\n%s", user.Username, strings.TrimSpace(string(out))), nil
+	outStr := strings.TrimSpace(string(out))
+	var numRows int64
+	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and AuthorId = ?;`, "%"+outStr+"%", userId).Scan(&numRows)
+	if err != nil {
+		return "", err
+	}
+	freshStr := "stale meme :-1:"
+	if numRows == 0 {
+		freshStr = ":100:％ CERTIFIED ＦＲＥＳＨ :ok_hand:"
+	}
+	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, strings.TrimSpace(string(out))), nil
 }
 
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
