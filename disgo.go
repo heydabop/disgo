@@ -364,7 +364,7 @@ func roll(session *discordgo.Session, chanId, authorId, messageId string, args [
 func uptime(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	output, err := exec.Command("uptime").Output()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	return strings.TrimSpace(string(output)), nil
 }
@@ -593,7 +593,7 @@ func lastseen(session *discordgo.Session, chanId, authorId, messageId string, ar
 	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and (Presence = 'offline' or Presence = 'idle') order by Timestamp desc limit 1", guild.ID, userId).Scan(&lastOnlineStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Sprintf("I've never seen %s", user.Username), nil
+			return fmt.Sprintf("%s was last seen at least %.f days ago", user.Username, time.Since(time.Date(2016, 4, 7, 1, 7, 0, 0, time.Local)).Hours()/24), nil
 		}
 		return "", err
 	}
@@ -710,12 +710,26 @@ func maths(session *discordgo.Session, chanId, authorId, messageId string, args 
 	return "", errors.New("No suitable answer found")
 }
 
+func temp(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	output, err := exec.Command("sensors", "-f", "coretemp-isa-0000").Output()
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(output), "\n")
+	return fmt.Sprintf("```%s```", strings.Join(lines[2:], "\n")), nil
+}
+
+func ayy(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	return "lmao", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `cwc
+	_, err = session.ChannelMessageSend(privateChannel.ID, `ayy
+cwc
 delete
 downvote [@user] (or @user--)
 forsen
@@ -728,6 +742,7 @@ roll [sides (optional)]
 spam [streamer (optional)]
 spamuser [username]
 soda
+temp
 top [number (optional)]
 topLength [number (optional)]
 twitch [channel]
@@ -766,6 +781,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"kickme":    Command(kickme),
 		"spamuser":  Command(spamuser),
 		"math":      Command(maths),
+		"temp":      Command(temp),
+		"ayy":       Command(ayy),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -790,6 +807,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 		if typingTimer, valid := typingTimer[m.Author.ID]; valid {
 			typingTimer.Stop()
+		}
+
+		if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
+			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}
 
 		var command []string
