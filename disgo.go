@@ -676,7 +676,7 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	}
 	freshStr := "stale meme :-1:"
 	if numRows == 0 {
-		freshStr = ":100:％ CERTIFIED ＦＲＥＳＨ :ok_hand:"
+		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
 	}
 	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, outStr), nil
 }
@@ -823,7 +823,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, m.ID, command[1:])
 			if err != nil {
-				message, msgErr := s.ChannelMessageSend(m.ChannelID, ":warning: `"+err.Error()+"`")
+				message, msgErr := s.ChannelMessageSend(m.ChannelID, "⚠ `"+err.Error()+"`")
 				if msgErr != nil {
 					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
 				} else {
