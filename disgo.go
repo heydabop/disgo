@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"github.com/bwmarrin/discordgo"
@@ -12,6 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
@@ -49,6 +51,20 @@ type UserMessageCount struct {
 type UserMessageLength struct {
 	AuthorId  string
 	AvgLength float64
+}
+
+type WolframPlaintextPod struct {
+	Title     string `xml:"title,attr"`
+	Error     bool   `xml:"error,attr"`
+	Primary   *bool  `xml:"primary,attr"`
+	Plaintext string `xml:"subpod>plaintext"`
+}
+
+type WolframQueryResult struct {
+	Success bool                  `xml:"success,attr"`
+	Error   bool                  `xml:"error,attr"`
+	NumPods int                   `xml:"numpods,attr"`
+	Pods    []WolframPlaintextPod `xml:"pod"`
 }
 
 type UserMessageLengths []UserMessageLength
@@ -358,7 +374,7 @@ func twitch(session *discordgo.Session, chanId, authorId, messageId string, args
 		return "", errors.New("No stream provided")
 	}
 	streamName := args[0]
-	res, err := http.Get(fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", streamName))
+	res, err := http.Get(fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", url.QueryEscape(streamName)))
 	if err != nil {
 		return "", err
 	}
@@ -650,6 +666,9 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 		return "", err
 	}
 	outStr := strings.TrimSpace(string(out))
+	if match := regexp.MustCompile(`^(.*) ([[:punct:]])$`).FindStringSubmatch(outStr); match != nil {
+		outStr = match[1] + match[2]
+	}
 	var numRows int64
 	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and AuthorId = ?;`, "%"+outStr+"%", userId).Scan(&numRows)
 	if err != nil {
@@ -659,7 +678,36 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if numRows == 0 {
 		freshStr = ":100:％ CERTIFIED ＦＲＥＳＨ :ok_hand:"
 	}
-	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, strings.TrimSpace(string(out))), nil
+	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, outStr), nil
+}
+
+func maths(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("Can't do math without maths")
+	}
+	formula := strings.Join(args, " ")
+	res, err := http.Get(fmt.Sprintf("http://api.wolframalpha.com/v2/query?input=%s&appid=%s&format=plaintext", url.QueryEscape(formula), url.QueryEscape(WOLFRAM_APPID)))
+	if err != nil {
+		return "", err
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return "", nil
+	}
+	var response WolframQueryResult
+	err = xml.Unmarshal(body, &response)
+	if err != nil {
+		return "", err
+	}
+	if response.NumPods == len(response.Pods) && response.NumPods > 0 {
+		for _, pod := range response.Pods {
+			if pod.Primary != nil && *(pod.Primary) == true {
+				return pod.Plaintext, nil
+			}
+		}
+	}
+	return "", errors.New("No suitable answer found")
 }
 
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -674,6 +722,7 @@ forsen
 karma/votes [number (optional)
 lastseen [username]
 lirik
+math [math stuff]
 rename [new username]
 roll [sides (optional)]
 spam [streamer (optional)]
@@ -716,6 +765,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"cwc":       Command(cwc),
 		"kickme":    Command(kickme),
 		"spamuser":  Command(spamuser),
+		"math":      Command(maths),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -773,7 +823,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, m.ID, command[1:])
 			if err != nil {
-				s.ChannelMessageSend(m.ChannelID, ":warning: `"+err.Error()+"`")
+				message, msgErr := s.ChannelMessageSend(m.ChannelID, ":warning: `"+err.Error()+"`")
+				if msgErr != nil {
+					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
+				} else {
+					lastMessage = *message
+					lastAuthorId = m.Author.ID
+				}
 				fmt.Println("ERROR in " + command[0])
 				fmt.Printf("ARGS: %v\n", command[1:])
 				fmt.Println("ERROR: " + err.Error())
