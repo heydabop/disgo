@@ -704,7 +704,7 @@ func spamdiscord(session *discordgo.Session, chanId, authorId, messageId string,
 		outStr = match[1] + match[2]
 	}
 	var numRows int64
-	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and ChanId = ?;`, "%"+outStr+"%", chanId).Scan(&numRows)
+	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and ChanId = ? and AuthorId != ?;`, "%"+outStr+"%", chanId, ownUserId).Scan(&numRows)
 	if err != nil {
 		return "", err
 	}
