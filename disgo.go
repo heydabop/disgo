@@ -288,7 +288,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 	_, err = sqlClient.Exec("insert into Vote(GuildId, MessageId, VoterID, VoteeID, Timestamp, IsUpvote) values (?, ?, ?, ?, ?, ?)",
 		channel.GuildID, messageIdUnit, authorId, userId, time.Now().Format(time.RFC3339Nano), isUpvote)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 
 	return "", nil
@@ -348,17 +348,20 @@ func votes(session *discordgo.Session, chanId, authorId, messageId string, args 
 }
 
 func roll(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
-	var max int
+	var max int64
 	if len(args) < 1 {
 		max = 6
 	} else {
 		var err error
-		max, err = strconv.Atoi(args[0])
-		if err != nil || max < 0 {
+		max, err = strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
 			return "", err
 		}
+		if max <= 0 {
+			return "", errors.New("Max roll must be more than 0")
+		}
 	}
-	return strconv.Itoa(rand.Intn(max) + 1), nil
+	return fmt.Sprintf("%d", rand.Int63n(max)+1), nil
 }
 
 func uptime(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -681,6 +684,37 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, outStr), nil
 }
 
+func spamdiscord(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	err := exec.Command("bash", "./gen_custom_log_by_chan.sh", chanId).Run()
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
+	logs, err := os.Open("/home/ross/markov/chan_" + chanId + "_custom")
+	if err != nil {
+		return "", err
+	}
+	cmd.Stdin = logs
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	outStr := strings.TrimSpace(string(out))
+	if match := regexp.MustCompile(`^(.*) ([[:punct:]])$`).FindStringSubmatch(outStr); match != nil {
+		outStr = match[1] + match[2]
+	}
+	var numRows int64
+	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and ChanId = ?;`, "%"+outStr+"%", chanId).Scan(&numRows)
+	if err != nil {
+		return "", err
+	}
+	freshStr := "stale meme :-1:"
+	if numRows == 0 {
+		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
+	}
+	return fmt.Sprintf("%s\n%s", freshStr, outStr), nil
+}
+
 func maths(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("Can't do math without maths")
@@ -693,7 +727,7 @@ func maths(session *discordgo.Session, chanId, authorId, messageId string, args 
 	body, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	var response WolframQueryResult
 	err = xml.Unmarshal(body, &response)
@@ -740,6 +774,7 @@ math [math stuff]
 rename [new username]
 roll [sides (optional)]
 spam [streamer (optional)]
+spamdiscord
 spamuser [username]
 soda
 temp
@@ -760,29 +795,30 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
 	funcMap := map[string]Command{
-		"spam":      Command(spam),
-		"soda":      Command(soda),
-		"lirik":     Command(lirik),
-		"forsen":    Command(forsen),
-		"roll":      Command(roll),
-		"help":      Command(help),
-		"upvote":    Command(upvote),
-		"downvote":  Command(downvote),
-		"votes":     Command(votes),
-		"karma":     Command(votes),
-		"uptime":    Command(uptime),
-		"twitch":    Command(twitch),
-		"top":       Command(top),
-		"toplength": Command(topLength),
-		"rename":    Command(rename),
-		"lastseen":  Command(lastseen),
-		"delete":    Command(deleteLastMessage),
-		"cwc":       Command(cwc),
-		"kickme":    Command(kickme),
-		"spamuser":  Command(spamuser),
-		"math":      Command(maths),
-		"temp":      Command(temp),
-		"ayy":       Command(ayy),
+		"spam":        Command(spam),
+		"soda":        Command(soda),
+		"lirik":       Command(lirik),
+		"forsen":      Command(forsen),
+		"roll":        Command(roll),
+		"help":        Command(help),
+		"upvote":      Command(upvote),
+		"downvote":    Command(downvote),
+		"votes":       Command(votes),
+		"karma":       Command(votes),
+		"uptime":      Command(uptime),
+		"twitch":      Command(twitch),
+		"top":         Command(top),
+		"toplength":   Command(topLength),
+		"rename":      Command(rename),
+		"lastseen":    Command(lastseen),
+		"delete":      Command(deleteLastMessage),
+		"cwc":         Command(cwc),
+		"kickme":      Command(kickme),
+		"spamuser":    Command(spamuser),
+		"math":        Command(maths),
+		"temp":        Command(temp),
+		"ayy":         Command(ayy),
+		"spamdiscord": Command(spamdiscord),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -911,14 +947,14 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	if p.Game != nil {
 		gameName = p.Game.Name
 	}
-	user, err := s.User(p.User.ID)
+	/*user, err := s.User(p.User.ID)
 	if err != nil {
 		fmt.Println("ERROR getting user")
 		fmt.Println(err.Error())
 	} else {
 		fmt.Printf("%20s %20s %20s : %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
-	}
-	_, err = sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", p.GuildID, p.User.ID, now.Format(time.RFC3339Nano), p.Status, gameName)
+	}*/
+	_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", p.GuildID, p.User.ID, now.Format(time.RFC3339Nano), p.Status, gameName)
 	if err != nil {
 		fmt.Println("ERROR insert into UserPresence DB")
 		fmt.Println(err.Error())
