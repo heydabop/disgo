@@ -804,6 +804,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
+	meanRegex := regexp.MustCompile(`fuc.*bot($|[[:space:]])`)
 	funcMap := map[string]Command{
 		"spam":        Command(spam),
 		"soda":        Command(soda),
@@ -858,6 +859,16 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 		if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
+		}
+		if match := meanRegex.FindString(m.Content); match != "" {
+			respond := rand.Intn(3)
+			if respond == 0 {
+				responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
+				_, err := s.ChannelMessageSend(m.ChannelID, responses[rand.Intn(len(responses))])
+				if err != nil {
+					fmt.Println("Error sending response " + err.Error())
+				}
+			}
 		}
 
 		var command []string
