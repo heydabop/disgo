@@ -757,6 +757,15 @@ func ayy(session *discordgo.Session, chanId, authorId, messageId string, args []
 	return "lmao", nil
 }
 
+func ping(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	output, err := exec.Command("ping", "-qc3", "discordapp.com").Output()
+	if err != nil {
+		return "", err
+	}
+	lines := strings.Split(string(output), "\n")
+	return fmt.Sprintf("```%s```", strings.Join(lines[len(lines)-3:], "\n")), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -771,6 +780,7 @@ karma/votes [number (optional)
 lastseen [username]
 lirik
 math [math stuff]
+ping
 rename [new username]
 roll [sides (optional)]
 spam [streamer (optional)]
@@ -819,6 +829,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"temp":        Command(temp),
 		"ayy":         Command(ayy),
 		"spamdiscord": Command(spamdiscord),
+		"ping":        Command(ping),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
