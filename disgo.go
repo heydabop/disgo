@@ -235,7 +235,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 			return "", err
 		}
 	}
-	if lastVoterIdAgainstUser == userId && time.Since(lastVoteTime).Hours() < 18 {
+	if lastVoterIdAgainstUser == userId && time.Since(lastVoteTime).Hours() < 12 {
 		return "Really?...", nil
 	}
 	var lastVoteeIdFromAuthor string
@@ -252,7 +252,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 			return "", err
 		}
 	}
-	if lastVoteeIdFromAuthor == userId && time.Since(lastVoteTime).Hours() < 18 {
+	if lastVoteeIdFromAuthor == userId && time.Since(lastVoteTime).Hours() < 12 {
 		return "Really?...", nil
 	}
 
@@ -766,12 +766,17 @@ func ping(session *discordgo.Session, chanId, authorId, messageId string, args [
 	return fmt.Sprintf("```%s```", strings.Join(lines[len(lines)-3:], "\n")), nil
 }
 
+func xd(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	return "PUCK FALMER", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
 		return "", err
 	}
 	_, err = session.ChannelMessageSend(privateChannel.ID, `ayy
+cputemp
 cwc
 delete
 downvote [@user] (or @user--)
@@ -787,12 +792,12 @@ spam [streamer (optional)]
 spamdiscord
 spamuser [username]
 soda
-temp
 top [number (optional)]
 topLength [number (optional)]
 twitch [channel]
 uptime
-upvote [@user] (or @user++)`)
+upvote [@user] (or @user++)
+xd`)
 	if err != nil {
 		return "", err
 	}
@@ -827,10 +832,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"kickme":      Command(kickme),
 		"spamuser":    Command(spamuser),
 		"math":        Command(maths),
-		"temp":        Command(temp),
+		"cputemp":     Command(temp),
 		"ayy":         Command(ayy),
 		"spamdiscord": Command(spamdiscord),
 		"ping":        Command(ping),
+		"xd":          Command(xd),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
