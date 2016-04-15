@@ -83,8 +83,8 @@ var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
-var currentVoiceChannel = ""
-var currentVoiceGuild = ""
+var followedVoiceUserId = ""
+var currentVoiceSession *discordgo.VoiceConnection
 var ownUserId = ""
 var lastMessage discordgo.Message
 var lastAuthorId = ""
@@ -781,6 +781,7 @@ cwc
 delete
 downvote [@user] (or @user--)
 forsen
+joinme
 karma/votes [number (optional)
 lastseen [username]
 lirik
@@ -801,6 +802,37 @@ xd`)
 	if err != nil {
 		return "", err
 	}
+	return "", nil
+}
+
+func joinme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	var voiceGuildId string
+	var voiceChanId *string
+	err := sqlClient.QueryRow("SELECT GuildId, ChanId from VoiceState where UserId = ? order by Timestamp desc limit 1", authorId).Scan(&voiceGuildId, &voiceChanId)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "I don't know where you are...", nil
+		} else {
+			return "", err
+		}
+	}
+	if voiceChanId == nil {
+		if currentVoiceSession != nil {
+			err = currentVoiceSession.Disconnect()
+			if err != nil {
+				return "", err
+			}
+			currentVoiceSession = nil
+			followedVoiceUserId = ""
+		}
+		return "", nil
+	}
+	voiceSession, err := session.ChannelVoiceJoin(voiceGuildId, *voiceChanId, true, false)
+	currentVoiceSession = voiceSession
+	if err != nil {
+		return "", err
+	}
+	followedVoiceUserId = authorId
 	return "", nil
 }
 
@@ -837,6 +869,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"spamdiscord": Command(spamdiscord),
 		"ping":        Command(ping),
 		"xd":          Command(xd),
+		"joinme":      Command(joinme),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -1022,6 +1055,35 @@ func main() {
 				responseId := rand.Intn(len(responses))
 				s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseId]))
 			})
+		}
+	})
+	client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+		if v.UserID == followedVoiceUserId {
+			if len(v.ChannelID) < 1 {
+				err := currentVoiceSession.Disconnect()
+				if err != nil {
+					fmt.Println("Error leaving voice channel " + err.Error())
+				}
+				currentVoiceSession = nil
+				followedVoiceUserId = ""
+			} else {
+				voiceSession, err := s.ChannelVoiceJoin(v.GuildID, v.ChannelID, true, false)
+				currentVoiceSession = voiceSession
+				if err != nil {
+					fmt.Println("Error following user " + err.Error())
+				}
+			}
+		}
+		var chanId *string
+		if len(v.ChannelID) < 1 {
+			chanId = nil
+		} else {
+			chanId = &v.ChannelID
+		}
+		_, err := sqlClient.Exec("INSERT INTO VoiceState (GuildId, UserId, ChanId, Timestamp) values (?, ?, ?, ?)", v.GuildID, v.UserID, chanId, time.Now().Format(time.RFC3339Nano))
+		if err != nil {
+			fmt.Println("ERROR inserting into VoiceState " + err.Error())
+			return
 		}
 	})
 	client.Open()
