@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
 	_ "github.com/mattn/go-sqlite3"
@@ -818,6 +819,7 @@ func joinme(session *discordgo.Session, chanId, authorId, messageId string, args
 	}
 	if voiceChanId == nil {
 		if currentVoiceSession != nil {
+			currentVoiceSession.Close()
 			err = currentVoiceSession.Disconnect()
 			if err != nil {
 				return "", err
@@ -827,12 +829,33 @@ func joinme(session *discordgo.Session, chanId, authorId, messageId string, args
 		}
 		return "", nil
 	}
-	voiceSession, err := session.ChannelVoiceJoin(voiceGuildId, *voiceChanId, true, false)
+	if currentVoiceSession != nil {
+		currentVoiceSession.Close()
+		err = currentVoiceSession.Disconnect()
+		if err != nil {
+			return "", err
+		}
+		currentVoiceSession = nil
+	}
+	voiceSession, err := session.ChannelVoiceJoin(voiceGuildId, *voiceChanId, false, false)
 	currentVoiceSession = voiceSession
 	if err != nil {
 		return "", err
 	}
 	followedVoiceUserId = authorId
+	err = voiceSession.Speaking(true)
+	defer voiceSession.Speaking(false)
+	if err != nil {
+		return "", err
+	}
+	suh := rand.Intn(3)
+	for i := 0; i < 10; i++ {
+		if currentVoiceSession.Ready == true {
+			dgvoice.PlayAudioFile(voiceSession, fmt.Sprintf("suh%d.mp3", suh))
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
 	return "", nil
 }
 
@@ -1037,6 +1060,12 @@ func main() {
 	}
 	defer client.Close()
 	defer client.Logout()
+	defer func() {
+		if currentVoiceSession != nil {
+			currentVoiceSession.Close()
+			currentVoiceSession.Disconnect()
+		}
+	}()
 	self, err := client.User("@me")
 	if err != nil {
 		fmt.Println(err)
@@ -1058,22 +1087,6 @@ func main() {
 		}
 	})
 	client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-		if v.UserID == followedVoiceUserId {
-			if len(v.ChannelID) < 1 {
-				err := currentVoiceSession.Disconnect()
-				if err != nil {
-					fmt.Println("Error leaving voice channel " + err.Error())
-				}
-				currentVoiceSession = nil
-				followedVoiceUserId = ""
-			} else {
-				voiceSession, err := s.ChannelVoiceJoin(v.GuildID, v.ChannelID, true, false)
-				currentVoiceSession = voiceSession
-				if err != nil {
-					fmt.Println("Error following user " + err.Error())
-				}
-			}
-		}
 		var chanId *string
 		if len(v.ChannelID) < 1 {
 			chanId = nil
@@ -1084,6 +1097,33 @@ func main() {
 		if err != nil {
 			fmt.Println("ERROR inserting into VoiceState " + err.Error())
 			return
+		}
+
+		if v.UserID == followedVoiceUserId && currentVoiceSession != nil {
+			if len(v.ChannelID) < 1 {
+				currentVoiceSession.Close()
+				err := currentVoiceSession.Disconnect()
+				if err != nil {
+					fmt.Println("Error leaving voice channel " + err.Error())
+					return
+				}
+				currentVoiceSession = nil
+				followedVoiceUserId = ""
+			} else {
+				currentVoiceSession.Close()
+				err = currentVoiceSession.Disconnect()
+				if err != nil {
+					fmt.Println("Error leaving voice channel " + err.Error())
+					return
+				}
+				currentVoiceSession = nil
+				voiceSession, err := s.ChannelVoiceJoin(v.GuildID, v.ChannelID, false, false)
+				currentVoiceSession = voiceSession
+				if err != nil {
+					fmt.Println("Error following user " + err.Error())
+					return
+				}
+			}
 		}
 	})
 	client.Open()
