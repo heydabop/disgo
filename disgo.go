@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -89,6 +90,7 @@ var currentVoiceSession *discordgo.VoiceConnection
 var ownUserId = ""
 var lastMessage discordgo.Message
 var lastAuthorId = ""
+var voiceMutex sync.Mutex
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
 	channel, err := session.Channel(chanId)
@@ -807,6 +809,8 @@ xd`)
 }
 
 func joinme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	voiceMutex.Lock()
+	defer voiceMutex.Unlock()
 	var voiceGuildId string
 	var voiceChanId *string
 	err := sqlClient.QueryRow("SELECT GuildId, ChanId from VoiceState where UserId = ? order by Timestamp desc limit 1", authorId).Scan(&voiceGuildId, &voiceChanId)
@@ -848,7 +852,7 @@ func joinme(session *discordgo.Session, chanId, authorId, messageId string, args
 	if err != nil {
 		return "", err
 	}
-	suh := rand.Intn(3)
+	suh := rand.Intn(6)
 	for i := 0; i < 10; i++ {
 		if currentVoiceSession.Ready == true {
 			dgvoice.PlayAudioFile(voiceSession, fmt.Sprintf("suh%d.mp3", suh))
@@ -1045,6 +1049,62 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	}
 }
 
+func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
+	if t.UserID == ownUserId {
+		return
+	}
+	if _, timerExists := typingTimer[t.UserID]; !timerExists && rand.Intn(20) == 0 {
+		typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
+			responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
+			responseId := rand.Intn(len(responses))
+			s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseId]))
+		})
+	}
+}
+
+func handleVoiceStateUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+	voiceMutex.Lock()
+	defer voiceMutex.Unlock()
+	var chanId *string
+	if len(v.ChannelID) < 1 {
+		chanId = nil
+	} else {
+		chanId = &v.ChannelID
+	}
+	_, err := sqlClient.Exec("INSERT INTO VoiceState (GuildId, UserId, ChanId, Timestamp) values (?, ?, ?, ?)", v.GuildID, v.UserID, chanId, time.Now().Format(time.RFC3339Nano))
+	if err != nil {
+		fmt.Println("ERROR inserting into VoiceState " + err.Error())
+		return
+	}
+
+	if v.UserID == followedVoiceUserId && currentVoiceSession != nil {
+		if len(v.ChannelID) < 1 {
+			currentVoiceSession.Close()
+			err := currentVoiceSession.Disconnect()
+			if err != nil {
+				fmt.Println("Error leaving voice channel " + err.Error())
+				return
+			}
+			currentVoiceSession = nil
+			followedVoiceUserId = ""
+		} else {
+			currentVoiceSession.Close()
+			err = currentVoiceSession.Disconnect()
+			if err != nil {
+				fmt.Println("Error leaving voice channel " + err.Error())
+				return
+			}
+			currentVoiceSession = nil
+			voiceSession, err := s.ChannelVoiceJoin(v.GuildID, v.ChannelID, false, false)
+			currentVoiceSession = voiceSession
+			if err != nil {
+				fmt.Println("Error following user " + err.Error())
+				return
+			}
+		}
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -1058,75 +1118,29 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	defer client.Close()
-	defer client.Logout()
-	defer func() {
-		if currentVoiceSession != nil {
-			currentVoiceSession.Close()
-			currentVoiceSession.Disconnect()
-		}
-	}()
+
 	self, err := client.User("@me")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	ownUserId = self.ID
+
 	client.AddHandler(makeMessageCreate())
 	client.AddHandler(handlePresenceUpdate)
-	client.AddHandler(func(s *discordgo.Session, t *discordgo.TypingStart) {
-		if t.UserID == ownUserId {
-			return
-		}
-		if _, timerExists := typingTimer[t.UserID]; !timerExists && rand.Intn(20) == 0 {
-			typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
-				responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
-				responseId := rand.Intn(len(responses))
-				s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseId]))
-			})
-		}
-	})
-	client.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-		var chanId *string
-		if len(v.ChannelID) < 1 {
-			chanId = nil
-		} else {
-			chanId = &v.ChannelID
-		}
-		_, err := sqlClient.Exec("INSERT INTO VoiceState (GuildId, UserId, ChanId, Timestamp) values (?, ?, ?, ?)", v.GuildID, v.UserID, chanId, time.Now().Format(time.RFC3339Nano))
-		if err != nil {
-			fmt.Println("ERROR inserting into VoiceState " + err.Error())
-			return
-		}
-
-		if v.UserID == followedVoiceUserId && currentVoiceSession != nil {
-			if len(v.ChannelID) < 1 {
-				currentVoiceSession.Close()
-				err := currentVoiceSession.Disconnect()
-				if err != nil {
-					fmt.Println("Error leaving voice channel " + err.Error())
-					return
-				}
-				currentVoiceSession = nil
-				followedVoiceUserId = ""
-			} else {
-				currentVoiceSession.Close()
-				err = currentVoiceSession.Disconnect()
-				if err != nil {
-					fmt.Println("Error leaving voice channel " + err.Error())
-					return
-				}
-				currentVoiceSession = nil
-				voiceSession, err := s.ChannelVoiceJoin(v.GuildID, v.ChannelID, false, false)
-				currentVoiceSession = voiceSession
-				if err != nil {
-					fmt.Println("Error following user " + err.Error())
-					return
-				}
-			}
-		}
-	})
+	client.AddHandler(handleTypingStart)
+	client.AddHandler(handleVoiceStateUpdate)
 	client.Open()
+	defer client.Close()
+	defer client.Logout()
+	defer func() {
+		voiceMutex.Lock()
+		defer voiceMutex.Unlock()
+		if currentVoiceSession != nil {
+			currentVoiceSession.Close()
+			currentVoiceSession.Disconnect()
+		}
+	}()
 
 	gameTicker := time.NewTicker(817 * time.Second)
 	go gameUpdater(client, gameTicker.C)
