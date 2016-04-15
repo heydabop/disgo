@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"sort"
 	"strconv"
@@ -85,19 +86,20 @@ var sqlClient *sql.DB
 var voteTime map[string]time.Time = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
 var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
-var followedVoiceUserId = ""
 var currentVoiceSession *discordgo.VoiceConnection
+var currentVoiceTimer *time.Timer
 var ownUserId = ""
 var lastMessage discordgo.Message
 var lastAuthorId = ""
 var voiceMutex sync.Mutex
+var Rand *rand.Rand
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
-	channel, err := session.Channel(chanId)
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
-	guild, err := session.Guild(channel.GuildID)
+	guild, err := session.State.Guild(channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -204,7 +206,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 	}
 	if authorId != ownUserId {
 		lastVoteTime, validTime := voteTime[authorId]
-		if validTime && time.Since(lastVoteTime).Minutes() < 5+5*rand.Float64() {
+		if validTime && time.Since(lastVoteTime).Minutes() < 5+5*Rand.Float64() {
 			return "Slow down champ.", nil
 		}
 	}
@@ -218,7 +220,7 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 		}
 		return "No.", nil
 	}
-	channel, err := session.Channel(chanId)
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
@@ -316,7 +318,7 @@ func votes(session *discordgo.Session, chanId, authorId, messageId string, args 
 			return "", err
 		}
 	}
-	channel, err := session.Channel(chanId)
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
@@ -364,7 +366,7 @@ func roll(session *discordgo.Session, chanId, authorId, messageId string, args [
 			return "", errors.New("Max roll must be more than 0")
 		}
 	}
-	return fmt.Sprintf("%d", rand.Int63n(max)+1), nil
+	return fmt.Sprintf("%d", Rand.Int63n(max)+1), nil
 }
 
 func uptime(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -531,7 +533,7 @@ func rename(session *discordgo.Session, chanId, authorId, messageId string, args
 			return "", err
 		}
 
-		channel, err := session.Channel(chanId)
+		channel, err := session.State.Channel(chanId)
 		if err != nil {
 			return "", err
 		}
@@ -540,7 +542,7 @@ func rename(session *discordgo.Session, chanId, authorId, messageId string, args
 		if err != nil {
 			authorKarma = 0
 		}
-		newLockedMinutes := rand.Intn(30) + 45 + 10*authorKarma
+		newLockedMinutes := Rand.Intn(30) + 45 + 10*authorKarma
 		if newLockedMinutes < 30 {
 			newLockedMinutes = 30
 		}
@@ -577,11 +579,11 @@ func lastseen(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if err != nil {
 		return "", err
 	}
-	channel, err := session.Channel(chanId)
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
-	guild, err := session.Guild(channel.GuildID)
+	guild, err := session.State.Guild(channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -634,7 +636,7 @@ func deleteLastMessage(session *discordgo.Session, chanId, authorId, messageId s
 }
 
 func kickme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
-	channel, err := session.Channel(chanId)
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
@@ -811,54 +813,70 @@ xd`)
 func joinme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	voiceMutex.Lock()
 	defer voiceMutex.Unlock()
-	var voiceGuildId string
-	var voiceChanId *string
-	err := sqlClient.QueryRow("SELECT GuildId, ChanId from VoiceState where UserId = ? order by Timestamp desc limit 1", authorId).Scan(&voiceGuildId, &voiceChanId)
+
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return "I don't know where you are...", nil
-		} else {
-			return "", err
+		return "", err
+	}
+	guild, err := session.State.Guild(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	voiceChanId := ""
+	for _, state := range guild.VoiceStates {
+		if state.UserID == authorId {
+			voiceChanId = state.ChannelID
+			break
 		}
 	}
-	if voiceChanId == nil {
-		if currentVoiceSession != nil {
-			currentVoiceSession.Close()
-			err = currentVoiceSession.Disconnect()
-			if err != nil {
-				return "", err
-			}
-			currentVoiceSession = nil
-			followedVoiceUserId = ""
-		}
-		return "", nil
+	if voiceChanId == "" {
+		return "I don't know where you are...", nil
 	}
+
 	if currentVoiceSession != nil {
+		if currentVoiceSession.ChannelID == voiceChanId && currentVoiceSession.GuildID == guild.ID {
+			return "", nil
+		}
 		currentVoiceSession.Close()
 		err = currentVoiceSession.Disconnect()
+		currentVoiceSession = nil
 		if err != nil {
 			return "", err
 		}
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	currentVoiceSession, err = session.ChannelVoiceJoin(guild.ID, voiceChanId, false, false)
+	if err != nil {
 		currentVoiceSession = nil
-	}
-	voiceSession, err := session.ChannelVoiceJoin(voiceGuildId, *voiceChanId, false, false)
-	currentVoiceSession = voiceSession
-	if err != nil {
 		return "", err
 	}
-	followedVoiceUserId = authorId
-	err = voiceSession.Speaking(true)
-	defer voiceSession.Speaking(false)
-	if err != nil {
-		return "", err
+	if currentVoiceTimer != nil {
+		currentVoiceTimer.Stop()
 	}
-	suh := rand.Intn(6)
-	for i := 0; i < 10; i++ {
-		if currentVoiceSession.Ready == true {
-			dgvoice.PlayAudioFile(voiceSession, fmt.Sprintf("suh%d.mp3", suh))
-			break
+	currentVoiceTimer = time.AfterFunc(1*time.Minute, func() {
+		if currentVoiceSession != nil {
+			currentVoiceSession.Close()
+			err := currentVoiceSession.Disconnect()
+			currentVoiceSession = nil
+			if err != nil {
+				fmt.Println("ERROR disconnecting from voice channel " + err.Error())
+			}
 		}
-		time.Sleep(1 * time.Second)
+	})
+
+	time.Sleep(1 * time.Second)
+	for i := 0; i < 10; i++ {
+		if currentVoiceSession.Ready == false || currentVoiceSession.OpusSend == nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		suh := Rand.Intn(7)
+		if err != nil {
+			return "", err
+		}
+		dgvoice.PlayAudioFile(currentVoiceSession, fmt.Sprintf("suh%d.mp3", suh))
+		break
 	}
 	return "", nil
 }
@@ -927,10 +945,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}
 		if match := meanRegex.FindString(m.Content); match != "" {
-			respond := rand.Intn(3)
+			respond := Rand.Intn(3)
 			if respond == 0 {
 				responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
-				_, err := s.ChannelMessageSend(m.ChannelID, responses[rand.Intn(len(responses))])
+				_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
 				if err != nil {
 					fmt.Println("Error sending response " + err.Error())
 				}
@@ -1005,13 +1023,13 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 		select {
 		case <-ticker:
 			if currentGame != "" {
-				changeGame := rand.Intn(3)
+				changeGame := Rand.Intn(3)
 				if changeGame != 0 {
 					continue
 				}
 				currentGame = ""
 			} else {
-				index := rand.Intn(len(games) * 5)
+				index := Rand.Intn(len(games) * 5)
 				if index >= len(games) {
 					currentGame = ""
 				} else {
@@ -1053,59 +1071,17 @@ func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
 	if t.UserID == ownUserId {
 		return
 	}
-	if _, timerExists := typingTimer[t.UserID]; !timerExists && rand.Intn(20) == 0 {
+	if _, timerExists := typingTimer[t.UserID]; !timerExists && Rand.Intn(20) == 0 {
 		typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
 			responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
-			responseId := rand.Intn(len(responses))
+			responseId := Rand.Intn(len(responses))
 			s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseId]))
 		})
 	}
 }
 
-func handleVoiceStateUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-	voiceMutex.Lock()
-	defer voiceMutex.Unlock()
-	var chanId *string
-	if len(v.ChannelID) < 1 {
-		chanId = nil
-	} else {
-		chanId = &v.ChannelID
-	}
-	_, err := sqlClient.Exec("INSERT INTO VoiceState (GuildId, UserId, ChanId, Timestamp) values (?, ?, ?, ?)", v.GuildID, v.UserID, chanId, time.Now().Format(time.RFC3339Nano))
-	if err != nil {
-		fmt.Println("ERROR inserting into VoiceState " + err.Error())
-		return
-	}
-
-	if v.UserID == followedVoiceUserId && currentVoiceSession != nil {
-		if len(v.ChannelID) < 1 {
-			currentVoiceSession.Close()
-			err := currentVoiceSession.Disconnect()
-			if err != nil {
-				fmt.Println("Error leaving voice channel " + err.Error())
-				return
-			}
-			currentVoiceSession = nil
-			followedVoiceUserId = ""
-		} else {
-			currentVoiceSession.Close()
-			err = currentVoiceSession.Disconnect()
-			if err != nil {
-				fmt.Println("Error leaving voice channel " + err.Error())
-				return
-			}
-			currentVoiceSession = nil
-			voiceSession, err := s.ChannelVoiceJoin(v.GuildID, v.ChannelID, false, false)
-			currentVoiceSession = voiceSession
-			if err != nil {
-				fmt.Println("Error following user " + err.Error())
-				return
-			}
-		}
-	}
-}
-
 func main() {
+	Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
 	if err != nil {
@@ -1118,6 +1094,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	client.StateEnabled = true
 
 	self, err := client.User("@me")
 	if err != nil {
@@ -1129,7 +1106,6 @@ func main() {
 	client.AddHandler(makeMessageCreate())
 	client.AddHandler(handlePresenceUpdate)
 	client.AddHandler(handleTypingStart)
-	client.AddHandler(handleVoiceStateUpdate)
 	client.Open()
 	defer client.Close()
 	defer client.Logout()
@@ -1138,9 +1114,33 @@ func main() {
 		defer voiceMutex.Unlock()
 		if currentVoiceSession != nil {
 			currentVoiceSession.Close()
-			currentVoiceSession.Disconnect()
+			err := currentVoiceSession.Disconnect()
+			if err != nil {
+				fmt.Println("ERROR leaving voice channel " + err.Error())
+			}
 		}
 	}()
+
+	signals := make(chan os.Signal, 1)
+
+	go func() {
+		select {
+		case <-signals:
+			voiceMutex.Lock()
+			defer voiceMutex.Unlock()
+			if currentVoiceSession != nil {
+				currentVoiceSession.Close()
+				err := currentVoiceSession.Disconnect()
+				if err != nil {
+					fmt.Println("ERROR leaving voice channel " + err.Error())
+				}
+			}
+			client.Logout()
+			client.Close()
+			os.Exit(0)
+		}
+	}()
+	signal.Notify(signals, os.Interrupt)
 
 	gameTicker := time.NewTicker(817 * time.Second)
 	go gameUpdater(client, gameTicker.C)
