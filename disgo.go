@@ -780,13 +780,13 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `ayy
+	_, err = session.ChannelMessageSend(privateChannel.ID, `asuh
+ayy
 cputemp
 cwc
 delete
 downvote [@user] (or @user--)
 forsen
-joinme
 karma/votes [number (optional)
 lastseen [username]
 lirik
@@ -810,7 +810,7 @@ xd`)
 	return "", nil
 }
 
-func joinme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+func asuh(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	voiceMutex.Lock()
 	defer voiceMutex.Unlock()
 
@@ -830,7 +830,7 @@ func joinme(session *discordgo.Session, chanId, authorId, messageId string, args
 		}
 	}
 	if voiceChanId == "" {
-		return "I don't know where you are...", nil
+		return "I can't find which voice channel you're in.", nil
 	}
 
 	if currentVoiceSession != nil {
@@ -914,7 +914,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"spamdiscord": Command(spamdiscord),
 		"ping":        Command(ping),
 		"xd":          Command(xd),
-		"joinme":      Command(joinme),
+		"asuh":        Command(asuh),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
