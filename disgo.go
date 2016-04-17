@@ -94,6 +94,7 @@ var lastAuthorId = ""
 var voiceMutex sync.Mutex
 var Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 var lastQuoteIds = make(map[string]int64)
+var userIdUpQuotes = make(map[string][]string)
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
 	channel, err := session.State.Channel(chanId)
@@ -693,6 +694,7 @@ func spamuser(session *discordgo.Session, chanId, authorId, messageId string, ar
 			fmt.Println("ERROR getting DiscordQuote ID ", err.Error())
 		} else {
 			lastQuoteIds[chanId] = quoteId
+			userIdUpQuotes[chanId] = make([]string, 0)
 		}
 	}
 	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, outStr), nil
@@ -735,6 +737,7 @@ func spamdiscord(session *discordgo.Session, chanId, authorId, messageId string,
 			fmt.Println("ERROR getting DiscordQuote ID ", err.Error())
 		} else {
 			lastQuoteIds[chanId] = quoteId
+			userIdUpQuotes[chanId] = make([]string, 0)
 		}
 	}
 	return fmt.Sprintf("%s\n%s", freshStr, outStr), nil
@@ -871,10 +874,16 @@ func upquote(session *discordgo.Session, chanId, authorId, messageId string, arg
 	if !found {
 		return "I can't find what I spammed last.", nil
 	}
+	for _, userId := range userIdUpQuotes[chanId] {
+		if userId == authorId {
+			return "You've already upquoted my last spam", nil
+		}
+	}
 	_, err := sqlClient.Exec(`update DiscordQuote set Score = Score + 1 WHERE Id = ?`, lastQuoteId)
 	if err != nil {
 		return "", err
 	}
+	userIdUpQuotes[chanId] = append(userIdUpQuotes[chanId], authorId)
 	return "", nil
 }
 
