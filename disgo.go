@@ -83,16 +83,16 @@ func (u UserMessageLengths) Swap(i, j int) {
 }
 
 var sqlClient *sql.DB
-var voteTime map[string]time.Time = make(map[string]time.Time)
+var voteTime = make(map[string]time.Time)
 var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
-var typingTimer map[string]*time.Timer = make(map[string]*time.Timer)
+var typingTimer = make(map[string]*time.Timer)
 var currentVoiceSession *discordgo.VoiceConnection
 var currentVoiceTimer *time.Timer
 var ownUserId = ""
 var lastMessage discordgo.Message
 var lastAuthorId = ""
 var voiceMutex sync.Mutex
-var Rand *rand.Rand
+var Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 var lastQuoteIds = make(map[string]int64)
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
@@ -104,7 +104,7 @@ func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (
 	if err != nil {
 		return "", err
 	}
-	similarUsers := make([]discordgo.User, 0)
+	var similarUsers []discordgo.User
 	lowerUsername := strings.ToLower(username)
 	if guild.Members != nil {
 		for _, member := range guild.Members {
@@ -328,7 +328,7 @@ func votes(session *discordgo.Session, chanId, authorId, messageId string, args 
 		return "", err
 	}
 	defer rows.Close()
-	votes := make([]KarmaDto, 0)
+	var votes []KarmaDto
 	for rows.Next() {
 		var userId string
 		var karma int64
@@ -348,9 +348,8 @@ func votes(session *discordgo.Session, chanId, authorId, messageId string, args 
 	}
 	if len(finalString) >= 2 {
 		return finalString[:len(finalString)-2], nil
-	} else {
-		return "", nil
 	}
+	return "", nil
 }
 
 func roll(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -421,7 +420,7 @@ func top(session *discordgo.Session, chanId, authorId, messageId string, args []
 		return "", err
 	}
 	defer rows.Close()
-	counts := make([]UserMessageCount, 0)
+	var counts []UserMessageCount
 	for rows.Next() {
 		var authorId string
 		var numMessages int64
@@ -441,9 +440,8 @@ func top(session *discordgo.Session, chanId, authorId, messageId string, args []
 	}
 	if len(finalString) >= 2 {
 		return finalString[:len(finalString)-2], nil
-	} else {
-		return "", nil
 	}
+	return "", nil
 }
 
 func topLength(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -496,9 +494,8 @@ func topLength(session *discordgo.Session, chanId, authorId, messageId string, a
 	}
 	if len(finalString) >= 2 {
 		return finalString[:len(finalString)-2], nil
-	} else {
-		return "", nil
 	}
+	return "", nil
 }
 
 func rename(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -1164,7 +1161,6 @@ func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
 }
 
 func main() {
-	Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
 	if err != nil {
