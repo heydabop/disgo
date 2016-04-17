@@ -775,41 +775,6 @@ func xd(session *discordgo.Session, chanId, authorId, messageId string, args []s
 	return "PUCK FALMER", nil
 }
 
-func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
-	privateChannel, err := session.UserChannelCreate(authorId)
-	if err != nil {
-		return "", err
-	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `asuh
-ayy
-cputemp
-cwc
-delete
-downvote [@user] (or @user--)
-forsen
-karma/votes [number (optional)
-lastseen [username]
-lirik
-math [math stuff]
-ping
-rename [new username]
-roll [sides (optional)]
-spam [streamer (optional)]
-spamdiscord
-spamuser [username]
-soda
-top [number (optional)]
-topLength [number (optional)]
-twitch [channel]
-uptime
-upvote [@user] (or @user++)
-xd`)
-	if err != nil {
-		return "", err
-	}
-	return "", nil
-}
-
 func asuh(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	voiceMutex.Lock()
 	defer voiceMutex.Unlock()
@@ -877,6 +842,41 @@ func asuh(session *discordgo.Session, chanId, authorId, messageId string, args [
 		}
 		dgvoice.PlayAudioFile(currentVoiceSession, fmt.Sprintf("suh%d.mp3", suh))
 		break
+	}
+	return "", nil
+}
+
+func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	privateChannel, err := session.UserChannelCreate(authorId)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, `asuh
+ayy
+cputemp
+cwc
+delete
+downvote [@user] (or @user--)
+forsen
+karma/votes [number (optional)
+lastseen [username]
+lirik
+math [math stuff]
+ping
+rename [new username]
+roll [sides (optional)]
+spam [streamer (optional)]
+spamdiscord
+spamuser [username]
+soda
+top [number (optional)]
+topLength [number (optional)]
+twitch [channel]
+uptime
+upvote [@user] (or @user++)
+xd`)
+	if err != nil {
+		return "", err
 	}
 	return "", nil
 }
