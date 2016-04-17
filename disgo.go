@@ -878,7 +878,49 @@ func upquote(session *discordgo.Session, chanId, authorId, messageId string, arg
 	if err != nil {
 		return "", err
 	}
-	return ":+1:", nil
+	return "", nil
+}
+
+func topquote(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	var limit int
+	if len(args) < 1 {
+		limit = 5
+	} else {
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
+	rows, err := sqlClient.Query(`select AuthorId, Content, Score from DiscordQuote where ChanId = ? and Score > 0 order by Score desc limit ?`, chanId, limit)
+	if err != nil {
+		return "", err
+	}
+	channel, err := session.State.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	messages := make([]string, limit)
+	var i int
+	for i = 0; rows.Next(); i++ {
+		var authorId sql.NullString
+		var content string
+		var score int
+		err = rows.Scan(&authorId, &content, &score)
+		if err != nil {
+			return "", err
+		}
+		authorName := `#` + channel.Name
+		if authorId.Valid {
+			author, err := session.User(authorId.String)
+			if err != nil {
+				return "", err
+			}
+			authorName = author.Username
+		}
+		messages[i] = fmt.Sprintf("%s (%d): %s", authorName, score, content)
+	}
+	return strings.Join(messages[:i], "\n"), nil
 }
 
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -955,6 +997,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"xd":          Command(xd),
 		"asuh":        Command(asuh),
 		"upquote":     Command(upquote),
+		"topquote":    Command(topquote),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
