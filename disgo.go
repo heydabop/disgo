@@ -851,30 +851,30 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `asuh
-ayy
-cputemp
-cwc
-delete
-downvote [@user] (or @user--)
-forsen
-karma/votes [number (optional)
-lastseen [username]
-lirik
-math [math stuff]
-ping
-rename [new username]
-roll [sides (optional)]
-spam [streamer (optional)]
-spamdiscord
-spamuser [username]
-soda
-top [number (optional)]
-topLength [number (optional)]
-twitch [channel]
-uptime
-upvote [@user] (or @user++)
-xd`)
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**asuh** - joins your voice channel
+**ayy**
+**cputemp** - displays CPU temperature
+**cwc** - alias for /spam cwc2016
+**delete** - deletes last message sent by bot (if you caused it)
+**downvote** [@user]/**@user--** - downvotes user
+**forsen** - alias for /spam forsenlol
+**karma/votes** [number (optional, default 5) - displays top <number> users and their karma
+**lastseen** [username] - displays when <username> was last seen
+**lirik** - alias for /spam lirik
+**math** [math stuff] - does math
+**ping** - displays ping to discordapp.com
+**rename** [new username] - renames bot
+**roll** [sides (optional, default 6)] - "rolls" a die with <sides> sides
+**spam** [streamer (optional)] - generates a messages based on logs from <steamer>, shows all streamer logs if no streamer is specified
+**spamdiscord** - generates a message based on logs from this discord channel
+**spamuser** [username] - generates a message based on discord logs of <username>
+**soda** - alias for /spam sodapoppin
+**top** [number (optional, default 5)] - displays top <number> users sorted by messages sent
+**topLength** [number (optional, default 5)] - dispalys top <number> users sorted by average words/message
+**twitch** [channel] - displays info about twitch channel
+**uptime** - displays server uptime and load
+**upvote** [@user]/**@user++** - upvotes user
+**xd**`)
 	if err != nil {
 		return "", err
 	}
