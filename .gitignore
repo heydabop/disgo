@@ -2,3 +2,4 @@ config.go
 disgo
 *.db
 *.bak
+*.mp3
