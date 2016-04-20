@@ -929,6 +929,11 @@ func topquote(session *discordgo.Session, chanId, authorId, messageId string, ar
 	return strings.Join(messages[:i], "\n"), nil
 }
 
+func eightball(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	responses := []string{"It is certain", "It is decidedly so", "Without a doubt", "Yes, definitely", "You may rely on it", "As I see it, yes", "Most likely", "Outlook good", "Yes", "Signs point to yes", "Reply hazy try again", "Ask again later", "Better not tell you now", "Cannot predict now", "Concentrate and ask again", "Don't count on it", "My reply is no", "My sources say no", "Outlook not so good", "Very doubtful"}
+	return responses[Rand.Intn(len(responses))], nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -975,7 +980,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
-	meanRegex := regexp.MustCompile(`fuc.*bot($|[[:space:]])`)
+	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`fuc.*bot($|[[:space:]])`), regexp.MustCompile(`shit.*bot($|[[:space:]])`)}
+	questionRegex := regexp.MustCompile(`^<@` + ownUserId + `>.*\?$`)
 	funcMap := map[string]Command{
 		"spam":        Command(spam),
 		"soda":        Command(soda),
@@ -1007,6 +1013,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"upquote":     Command(upquote),
 		"uq":          Command(upquote),
 		"topquote":    Command(topquote),
+		"8ball":       Command(eightball),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -1036,20 +1043,28 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}
-		if match := meanRegex.FindString(m.Content); match != "" {
-			respond := Rand.Intn(3)
-			if respond == 0 {
-				responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
-				_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
-				if err != nil {
-					fmt.Println("Error sending response " + err.Error())
+		for _, meanRegex := range meanRegexes {
+			if match := meanRegex.FindString(m.Content); match != "" {
+				respond := Rand.Intn(3)
+				if respond == 0 {
+					responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
+					_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
+					if err != nil {
+						fmt.Println("Error sending response " + err.Error())
+					}
+					break
 				}
 			}
 		}
 
 		var command []string
-		if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
-			command = []string{"upvote", match[1]}
+		if match := questionRegex.FindString(m.Content); match != "" {
+			command = []string{"8ball"}
+		}
+		if len(command) == 0 {
+			if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
+				command = []string{"upvote", match[1]}
+			}
 		}
 		if len(command) == 0 {
 			if match := downvoteRegex.FindStringSubmatch(m.Content); match != nil {
@@ -1073,7 +1088,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			return
 		}
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
-			if command[0] != "upvote" && command[0] != "downvote" {
+			if command[0] != "upvote" &&
+				command[0] != "downvote" &&
+				command[0] != "help" &&
+				command[0] != "rename" &&
+				command[0] != "delete" &&
+				command[0] != "asuh" &&
+				command[0] != "uq" &&
+				command[0] != "upquote" {
 				s.ChannelTyping(m.ChannelID)
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, m.ID, command[1:])
@@ -1094,7 +1116,12 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				message, err := s.ChannelMessageSend(m.ChannelID, reply)
 				if err != nil {
 					fmt.Println("ERROR sending message: " + err.Error())
-					return
+					time.Sleep(500 * time.Millisecond)
+					message, err = s.ChannelMessageSend(m.ChannelID, reply)
+					if err != nil {
+						fmt.Println("ERROR sending again ", err.Error())
+						return
+					}
 				}
 				lastMessage = *message
 				lastAuthorId = m.Author.ID
