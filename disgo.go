@@ -982,6 +982,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
 	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`fuc.*bot($|[[:space:]])`), regexp.MustCompile(`shit.*bot($|[[:space:]])`)}
 	questionRegex := regexp.MustCompile(`^<@` + ownUserId + `>.*\?$`)
+	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	funcMap := map[string]Command{
 		"spam":        Command(spam),
 		"soda":        Command(soda),
@@ -1060,6 +1061,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		var command []string
 		if match := questionRegex.FindString(m.Content); match != "" {
 			command = []string{"8ball"}
+		}
+		if match := inTheChatRegex.FindStringSubmatch(m.Content); match != nil {
+			s.ChannelMessageSend(m.ChannelID, match[1])
 		}
 		if len(command) == 0 {
 			if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
