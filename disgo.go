@@ -934,6 +934,91 @@ func eightball(session *discordgo.Session, chanId, authorId, messageId string, a
 	return responses[Rand.Intn(len(responses))], nil
 }
 
+func wlist(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	var limit int
+	if len(args) < 1 {
+		limit = 5
+	} else {
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
+	words := WL_WORDS
+	rows, err := sqlClient.Query(`select AuthorId, Content from Message where ChanId = ? and Content not like '/%'`, chanId)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	countMap := make(map[string]int64)
+	for rows.Next() {
+		var authorId, message string
+		err := rows.Scan(&authorId, &message)
+		if err != nil {
+			return "", err
+		}
+		messageWords := strings.Fields(message)
+		for i, word := range messageWords {
+			_, found := words[word]
+			if found {
+				countMap[authorId] += 1
+				continue
+			}
+			if i+2 > len(messageWords) {
+				continue
+			}
+			_, found = words[strings.Join(messageWords[i:i+2], " ")]
+			if found {
+				countMap[authorId] += 1
+				continue
+			}
+			if i+3 > len(messageWords) {
+				continue
+			}
+			_, found = words[strings.Join(messageWords[i:i+3], " ")]
+			if found {
+				countMap[authorId] += 1
+				continue
+			}
+			if i+4 > len(messageWords) {
+				continue
+			}
+			_, found = words[strings.Join(messageWords[i:i+4], " ")]
+			if found {
+				countMap[authorId] += 1
+				continue
+			}
+		}
+	}
+	var counts UserMessageLengths
+	for authorId, score := range countMap {
+		var numMessages int64
+		err := sqlClient.QueryRow(`select count(Id) from Message where ChanId = ? and AuthorId = ? and Content not like '/%'`, chanId, authorId).Scan(&numMessages)
+		if err != nil {
+			return "", err
+		}
+		counts = append(counts, UserMessageLength{authorId, float64(score) / float64(numMessages)})
+	}
+	if len(counts) == 0 {
+		return "You're all clean!", nil
+	}
+	sort.Sort(&counts)
+	length := limit
+	if len(counts) < limit {
+		length = len(counts)
+	}
+	output := make([]string, length)
+	for i := 0; i < length; i++ {
+		author, err := session.User(counts[i].AuthorId)
+		if err != nil {
+			return "", err
+		}
+		output[i] = fmt.Sprintf("%s: %.4f", author.Username, counts[i].AvgLength)
+	}
+	return strings.Join(output, ", "), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -968,6 +1053,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **upvote** [@user] - upvotes user
 **@[user]++** - upvotes user
 **votes** [number (optional)] - displays top <number> users and their karma
+`+string([]byte{42, 42, 119, 97, 116, 99, 104, 108, 105, 115, 116, 42, 42, 32, 91, 110, 117, 109, 98, 101, 114, 32, 40, 111, 112, 116, 105, 111, 110, 97, 108, 41, 93, 32, 45, 32, 100, 105, 115, 112, 108, 97, 121, 115, 32, 116, 111, 112, 32, 60, 110, 117, 109, 98, 101, 114, 62, 32, 117, 115, 101, 114, 115, 32, 115, 111, 114, 116, 101, 100, 32, 98, 121, 32, 116, 101, 114, 114, 111, 114, 105, 115, 109, 32, 112, 101, 114, 32, 109, 101, 115, 115, 97, 103, 101})+`
 **xd**`)
 	if err != nil {
 		return "", err
@@ -1015,6 +1101,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"uq":          Command(upquote),
 		"topquote":    Command(topquote),
 		"8ball":       Command(eightball),
+		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -1124,7 +1211,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 					message, err = s.ChannelMessageSend(m.ChannelID, reply)
 					if err != nil {
 						fmt.Println("ERROR sending again ", err.Error())
-						return
+						message, err = s.ChannelMessageSend(m.ChannelID, "⚠ `"+err.Error()+"`")
+						if err != nil {
+							fmt.Println("ERROR sending error")
+						}
 					}
 				}
 				lastMessage = *message
