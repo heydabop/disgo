@@ -10,6 +10,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -95,6 +97,22 @@ var voiceMutex sync.Mutex
 var Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 var lastQuoteIds = make(map[string]int64)
 var userIdUpQuotes = make(map[string][]string)
+
+func timeSinceStr(timeSince time.Duration) string {
+	str := ""
+	if timeSince <= 1*time.Second {
+		str = "less than a second ago"
+	} else if timeSince < 120*time.Second {
+		str = fmt.Sprintf("%.f seconds ago", timeSince.Seconds())
+	} else if timeSince < 120*time.Minute {
+		str = fmt.Sprintf("%.f minutes ago", timeSince.Minutes())
+	} else if timeSince < 48*time.Hour {
+		str = fmt.Sprintf("%.f hours ago", timeSince.Hours())
+	} else {
+		str = fmt.Sprintf("%.f days ago", timeSince.Hours()/24)
+	}
+	return str
+}
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
 	channel, err := session.State.Channel(chanId)
@@ -387,8 +405,11 @@ func twitch(session *discordgo.Session, chanId, authorId, messageId string, args
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
 	body, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
 	if err != nil {
 		return "", err
 	}
@@ -609,18 +630,7 @@ func lastseen(session *discordgo.Session, chanId, authorId, messageId string, ar
 		return "", err
 	}
 	timeSince := time.Since(lastOnline)
-	lastSeenStr := ""
-	if timeSince <= 1*time.Second {
-		lastSeenStr = "less than a second ago"
-	} else if timeSince < 120*time.Second {
-		lastSeenStr = fmt.Sprintf("%.f seconds ago", timeSince.Seconds())
-	} else if timeSince < 120*time.Minute {
-		lastSeenStr = fmt.Sprintf("%.f minutes ago", timeSince.Minutes())
-	} else if timeSince < 48*time.Hour {
-		lastSeenStr = fmt.Sprintf("%.f hours ago", timeSince.Hours())
-	} else {
-		lastSeenStr = fmt.Sprintf("%.f days ago", timeSince.Hours()/24)
-	}
+	lastSeenStr := timeSinceStr(timeSince)
 	return fmt.Sprintf("%s was last seen %s", user.Username, lastSeenStr), nil
 }
 
@@ -752,8 +762,11 @@ func maths(session *discordgo.Session, chanId, authorId, messageId string, args 
 	if err != nil {
 		return "", err
 	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
 	body, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
 	if err != nil {
 		return "", err
 	}
@@ -1019,6 +1032,55 @@ func wlist(session *discordgo.Session, chanId, authorId, messageId string, args 
 	return strings.Join(output, ", "), nil
 }
 
+func oddshot(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No oddshot url provided")
+	}
+	res, err := http.Get(fmt.Sprintf(args[0]))
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
+	page, err := html.Parse(res.Body)
+	if err != nil {
+		return "", err
+	}
+	var provider, streamer, title, timestamp string
+	var findTitle func(*html.Node)
+	findTitle = func(n *html.Node) {
+		if n.Type == html.ElementNode && len(n.Attr) > 0 {
+			if p := n.FirstChild; p != nil && p.Type == html.TextNode {
+				if n.DataAtom == atom.P && n.Attr[0].Key == "class" {
+					if n.Attr[0].Val == "shot-title" {
+						title = p.Data
+					} else if n.Attr[0].Val == "shot-timestamp" {
+						timestamp = p.Data
+					}
+				} else if n.DataAtom == atom.Span && n.Attr[0].Key == "id" {
+					if n.Attr[0].Val == "providerID" {
+						provider = p.Data
+					} else if n.Attr[0].Val == "streamerID" {
+						streamer = p.Data
+					}
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findTitle(c)
+		}
+	}
+	findTitle(page)
+	postedTime, err := time.Parse(time.RFC3339, timestamp)
+	timeSince := timeSinceStr(time.Since(postedTime))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/%s: %s\n%s", provider, streamer, title, timeSince), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1065,8 +1127,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + ownUserId + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
-	twitchRegex := regexp.MustCompile(`https?:\/\/(www.)?twitch.tv\/([[:alnum:]_]+)`)
-	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`fuc.*bot($|[[:space:]])`), regexp.MustCompile(`shit.*bot($|[[:space:]])`)}
+	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
+	oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
+	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`(?i)fuc.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)shit.*bot($|[[:space:]])`)}
 	questionRegex := regexp.MustCompile(`^<@` + ownUserId + `>.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	funcMap := map[string]Command{
@@ -1101,6 +1164,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"uq":          Command(upquote),
 		"topquote":    Command(topquote),
 		"8ball":       Command(eightball),
+		"oddshot":     Command(oddshot),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -1165,6 +1229,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if len(command) == 0 {
 			if match := twitchRegex.FindStringSubmatch(m.Content); match != nil {
 				command = []string{"twitch", match[2]}
+			}
+		}
+		if len(command) == 0 {
+			if match := oddshotRegex.FindString(m.Content); match != "" {
+				command = []string{"oddshot", match}
 			}
 		}
 		if len(command) == 0 {
