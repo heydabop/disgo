@@ -1101,7 +1101,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **ping** - displays ping to discordapp.com
 **rename** [new username] - renames bot
 **roll** [sides (optional)] - "rolls" a die with <sides> sides
-**spam** [streamer (optional)] - generates a messages based on logs from <steamer>, shows all streamer logs if no streamer is specified
+**spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
 **spamuser** [username] - generates a message based on discord logs of <username>
 **soda** - alias for /spam sodapoppin
@@ -1168,85 +1168,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
-	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		now := time.Now()
-		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, now.Format(time.Stamp), m.Author.Username, m.Content)
-
-		messageId, err := strconv.ParseUint(m.ID, 10, 64)
-		if err != nil {
-			fmt.Println("ERROR parsing message ID " + err.Error())
-			return
-		}
-		_, err = sqlClient.Exec("INSERT INTO Message (Id, ChanId, AuthorId, Timestamp, Content) values (?, ?, ?, ?, ?)",
-			messageId, m.ChannelID, m.Author.ID, now.Format(time.RFC3339Nano), m.Content)
-		if err != nil {
-			fmt.Println("ERROR inserting into Message")
-			fmt.Println(err.Error())
-		}
-
-		if m.Author.ID == ownUserId {
-			return
-		}
-
-		if typingTimer, valid := typingTimer[m.Author.ID]; valid {
-			typingTimer.Stop()
-		}
-
-		if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
-			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
-		}
-		for _, meanRegex := range meanRegexes {
-			if match := meanRegex.FindString(m.Content); match != "" {
-				respond := Rand.Intn(3)
-				if respond == 0 {
-					responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
-					_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
-					if err != nil {
-						fmt.Println("Error sending response " + err.Error())
-					}
-					break
-				}
-			}
-		}
-
-		var command []string
-		if match := questionRegex.FindString(m.Content); match != "" {
-			command = []string{"8ball"}
-		}
-		if match := inTheChatRegex.FindStringSubmatch(m.Content); match != nil {
-			s.ChannelMessageSend(m.ChannelID, match[1])
-		}
-		if len(command) == 0 {
-			if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
-				command = []string{"upvote", match[1]}
-			}
-		}
-		if len(command) == 0 {
-			if match := downvoteRegex.FindStringSubmatch(m.Content); match != nil {
-				command = []string{"downvote", match[1]}
-			}
-		}
-		if len(command) == 0 {
-			if match := twitchRegex.FindStringSubmatch(m.Content); match != nil {
-				command = []string{"twitch", match[2]}
-			}
-		}
-		if len(command) == 0 {
-			if match := oddshotRegex.FindString(m.Content); match != "" {
-				command = []string{"oddshot", match}
-			}
-		}
-		if len(command) == 0 {
-			for _, regex := range regexes {
-				if match := regex.FindStringSubmatch(m.Content); match != nil {
-					command = strings.Fields(match[1])
-					break
-				}
-			}
-		}
-		if len(command) == 0 {
-			return
-		}
+	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			if command[0] != "upvote" &&
 				command[0] != "downvote" &&
@@ -1290,6 +1212,79 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				lastAuthorId = m.Author.ID
 			}
 			return
+		}
+	}
+
+	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		now := time.Now()
+		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, now.Format(time.Stamp), m.Author.Username, m.Content)
+
+		messageId, err := strconv.ParseUint(m.ID, 10, 64)
+		if err != nil {
+			fmt.Println("ERROR parsing message ID " + err.Error())
+			return
+		}
+		_, err = sqlClient.Exec("INSERT INTO Message (Id, ChanId, AuthorId, Timestamp, Content) values (?, ?, ?, ?, ?)",
+			messageId, m.ChannelID, m.Author.ID, now.Format(time.RFC3339Nano), m.Content)
+		if err != nil {
+			fmt.Println("ERROR inserting into Message")
+			fmt.Println(err.Error())
+		}
+
+		if m.Author.ID == ownUserId {
+			return
+		}
+
+		if typingTimer, valid := typingTimer[m.Author.ID]; valid {
+			typingTimer.Stop()
+		}
+
+		if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
+			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
+		}
+		for _, meanRegex := range meanRegexes {
+			if match := meanRegex.FindString(m.Content); match != "" {
+				respond := Rand.Intn(3)
+				if respond == 0 {
+					responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
+					_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
+					if err != nil {
+						fmt.Println("Error sending response " + err.Error())
+					}
+					break
+				}
+			}
+		}
+
+		if match := questionRegex.FindString(m.Content); match != "" {
+			executeCommand(s, m, []string{"8ball"})
+			return
+		}
+		if match := inTheChatRegex.FindStringSubmatch(m.Content); match != nil {
+			s.ChannelMessageSend(m.ChannelID, match[1])
+			return
+		}
+		if match := upvoteRegex.FindStringSubmatch(m.Content); match != nil {
+			executeCommand(s, m, []string{"upvote", match[1]})
+			return
+		}
+		if match := downvoteRegex.FindStringSubmatch(m.Content); match != nil {
+			executeCommand(s, m, []string{"downvote", match[1]})
+			return
+		}
+		if match := twitchRegex.FindStringSubmatch(m.Content); match != nil {
+			executeCommand(s, m, []string{"twitch", match[2]})
+			return
+		}
+		if match := oddshotRegex.FindString(m.Content); match != "" {
+			executeCommand(s, m, []string{"oddshot", match})
+			return
+		}
+		for _, regex := range regexes {
+			if match := regex.FindStringSubmatch(m.Content); match != nil {
+				executeCommand(s, m, strings.Fields(match[1]))
+				return
+			}
 		}
 	}
 }
