@@ -872,7 +872,7 @@ func asuh(session *discordgo.Session, chanId, authorId, messageId string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(20)
+		suh := Rand.Intn(21)
 		if err != nil {
 			return "", err
 		}
