@@ -1137,6 +1137,15 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 	return "👍", nil
 }
 
+func meme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	var link string
+	err := sqlClient.QueryRow(`SELECT Content FROM Message WHERE ChanId = ? AND Content LIKE 'http://%' OR Content LIKE 'https://%' ORDER BY RANDOM() LIMIT 1`, chanId).Scan(&link)
+	if err != nil {
+		return "", err
+	}
+	return link, nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1154,6 +1163,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **lastseen** [username] - displays when <username> was last seen
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
+**meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
 **remindme** in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to take a dump)
 **rename** [new username] - renames bot
@@ -1223,6 +1233,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"8ball":       Command(eightball),
 		"oddshot":     Command(oddshot),
 		"remindme":    Command(remindme),
+		"meme":        Command(meme),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
