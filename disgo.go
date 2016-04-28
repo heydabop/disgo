@@ -838,7 +838,6 @@ func asuh(session *discordgo.Session, chanId, authorId, messageId string, args [
 		if currentVoiceSession.ChannelID == voiceChanId && currentVoiceSession.GuildID == guild.ID {
 			return "", nil
 		}
-		currentVoiceSession.Close()
 		err = currentVoiceSession.Disconnect()
 		currentVoiceSession = nil
 		if err != nil {
@@ -857,7 +856,6 @@ func asuh(session *discordgo.Session, chanId, authorId, messageId string, args [
 	}
 	currentVoiceTimer = time.AfterFunc(1*time.Minute, func() {
 		if currentVoiceSession != nil {
-			currentVoiceSession.Close()
 			err := currentVoiceSession.Disconnect()
 			currentVoiceSession = nil
 			if err != nil {
@@ -1458,7 +1456,6 @@ func main() {
 		voiceMutex.Lock()
 		defer voiceMutex.Unlock()
 		if currentVoiceSession != nil {
-			currentVoiceSession.Close()
 			err := currentVoiceSession.Disconnect()
 			if err != nil {
 				fmt.Println("ERROR leaving voice channel " + err.Error())
@@ -1474,7 +1471,6 @@ func main() {
 			voiceMutex.Lock()
 			defer voiceMutex.Unlock()
 			if currentVoiceSession != nil {
-				currentVoiceSession.Close()
 				err := currentVoiceSession.Disconnect()
 				if err != nil {
 					fmt.Println("ERROR leaving voice channel " + err.Error())
