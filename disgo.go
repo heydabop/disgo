@@ -1081,6 +1081,62 @@ func oddshot(session *discordgo.Session, chanId, authorId, messageId string, arg
 	return fmt.Sprintf("%s/%s: %s\n%s", provider, streamer, title, timeSince), nil
 }
 
+func remindme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	arg := strings.Join(args, " ")
+	fmt.Println(arg)
+	inTimeRegex := regexp.MustCompile(`(?i)in (?:(?:(?:(\d+) years?)|(?:(\d+) months?)|(?:(\d+) weeks?)|(?:(\d+) days?)|(?:(\d+) hours?)|(?:(\d+) minutes?)|(?:(\d+) seconds?))\s?)+to\s+(.*)`)
+	match := inTimeRegex.FindStringSubmatch(arg)
+	fmt.Printf("%#v\n", match)
+	if match == nil || len(match) != 9 {
+		return "What?", nil
+	}
+	content := match[8]
+	var years, months, weeks, days, hours, minutes, seconds int
+	var err error
+	years, err = strconv.Atoi(match[1])
+	if err != nil {
+		days = 0
+	}
+	months, err = strconv.Atoi(match[2])
+	if err != nil {
+		days = 0
+	}
+	weeks, err = strconv.Atoi(match[3])
+	if err != nil {
+		days = 0
+	}
+	days, err = strconv.Atoi(match[4])
+	if err != nil {
+		days = 0
+	}
+	hours, err = strconv.Atoi(match[5])
+	if err != nil {
+		hours = 0
+	}
+	minutes, err = strconv.Atoi(match[6])
+	if err != nil {
+		minutes = 0
+	}
+	seconds, err = strconv.Atoi(match[7])
+	if err != nil {
+		seconds = 0
+	}
+	fmt.Printf("%dy %dm %dw %dd %dh %dm %ds\n", years, months, weeks, days, hours, minutes, seconds)
+	now := time.Now()
+	remindTime := now.AddDate(years, months, weeks*7+days).Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second)
+	fmt.Printf(remindTime.Format(time.RFC3339))
+	if remindTime.Before(now) {
+		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
+		return responses[Rand.Intn(len(responses))], nil
+	}
+	_, err = sqlClient.Exec("INSERT INTO Reminder (ChanId, AuthorId, Time, Content) values (?, ?, ?, ?)", chanId, authorId, remindTime.Format(time.RFC3339), content)
+	if err != nil {
+		return "", err
+	}
+	time.AfterFunc(remindTime.Sub(now), func() { session.ChannelMessageSend(chanId, fmt.Sprintf("<@%s> %s", authorId, content)) })
+	return "👍", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1099,6 +1155,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **ping** - displays ping to discordapp.com
+**remindme** in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to take a dump)
 **rename** [new username] - renames bot
 **roll** [sides (optional)] - "rolls" a die with <sides> sides
 **spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
@@ -1130,7 +1187,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
 	oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
 	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`(?i)fuc.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)shit.*bot($|[[:space:]])`)}
-	questionRegex := regexp.MustCompile(`^<@` + ownUserId + `>.*\?$`)
+	questionRegex := regexp.MustCompile(`^<@` + ownUserId + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	funcMap := map[string]Command{
 		"spam":        Command(spam),
@@ -1165,6 +1222,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"topquote":    Command(topquote),
 		"8ball":       Command(eightball),
 		"oddshot":     Command(oddshot),
+		"remindme":    Command(remindme),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -1420,6 +1478,25 @@ func main() {
 
 	gameTicker := time.NewTicker(817 * time.Second)
 	go gameUpdater(client, gameTicker.C)
+
+	now := time.Now()
+	rows, err := sqlClient.Query("select ChanId, AuthorId, Time, Content from Reminder where Time > ?", now.Format(time.RFC3339))
+	if err != nil {
+		fmt.Println("ERROR setting reminders", err)
+	}
+	for rows.Next() {
+		var chanId, authorId, timeStr, content string
+		err := rows.Scan(&chanId, &authorId, &timeStr, &content)
+		if err != nil {
+			fmt.Println("ERROR setting reminder", err)
+		}
+		reminderTime, err := time.Parse(time.RFC3339, timeStr)
+		if err != nil {
+			fmt.Println("ERROR getting reminder time", err)
+		}
+		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanId, fmt.Sprintf("<@%s> %s", authorId, content)) })
+	}
+	rows.Close()
 
 	var input string
 	fmt.Scanln(&input)
