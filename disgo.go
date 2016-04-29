@@ -881,6 +881,7 @@ func asuh(session *discordgo.Session, chanId, authorId, messageId string, args [
 		dgvoice.PlayAudioFile(currentVoiceSession, fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
+	session.ChannelMessageDelete(chanId, messageId)
 	return "", nil
 }
 
@@ -1086,7 +1087,7 @@ func oddshot(session *discordgo.Session, chanId, authorId, messageId string, arg
 func remindme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	arg := strings.Join(args, " ")
 	fmt.Println(arg)
-	inTimeRegex := regexp.MustCompile(`(?i)in (?:(?:(?:(\d+) years?)|(?:(\d+) months?)|(?:(\d+) weeks?)|(?:(\d+) days?)|(?:(\d+) hours?)|(?:(\d+) minutes?)|(?:(\d+) seconds?))\s?)+to\s+(.*)`)
+	inTimeRegex := regexp.MustCompile(`(?i)(?:in)?\s*(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))\s?)+to\s+(.*)`)
 	match := inTimeRegex.FindStringSubmatch(arg)
 	fmt.Printf("%#v\n", match)
 	if match == nil || len(match) != 9 {
@@ -1218,6 +1219,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 	if err != nil {
 		return "", err
 	}
+	session.ChannelMessageDelete(chanId, messageId)
 	return "", nil
 }
 
