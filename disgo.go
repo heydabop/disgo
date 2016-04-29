@@ -224,6 +224,14 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 	} else {
 		return "", errors.New("No valid mention found")
 	}
+	channel, err := session.State.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.GuildMember(channel.GuildID, userId)
+	if err != nil {
+		return "", err
+	}
 	if authorId != ownUserId {
 		lastVoteTime, validTime := voteTime[authorId]
 		if validTime && time.Since(lastVoteTime).Minutes() < 5+5*Rand.Float64() {
@@ -239,10 +247,6 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 			voteTime[authorId] = time.Now()
 		}
 		return "No.", nil
-	}
-	channel, err := session.State.Channel(chanId)
-	if err != nil {
-		return "", err
 	}
 
 	var lastVoterIdAgainstUser, lastVoteTimestamp string
@@ -1089,7 +1093,8 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 		return "What?", nil
 	}
 	content := match[8]
-	var years, months, weeks, days, hours, minutes, seconds int
+	var years, months, weeks, days int
+	var hours, minutes, seconds int64
 	var err error
 	years, err = strconv.Atoi(match[1])
 	if err != nil {
@@ -1107,22 +1112,22 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 	if err != nil {
 		days = 0
 	}
-	hours, err = strconv.Atoi(match[5])
+	hours, err = strconv.ParseInt(match[5], 10, 64)
 	if err != nil {
 		hours = 0
 	}
-	minutes, err = strconv.Atoi(match[6])
+	minutes, err = strconv.ParseInt(match[6], 10, 64)
 	if err != nil {
 		minutes = 0
 	}
-	seconds, err = strconv.Atoi(match[7])
+	seconds, err = strconv.ParseInt(match[7], 10, 64)
 	if err != nil {
 		seconds = 0
 	}
 	fmt.Printf("%dy %dm %dw %dd %dh %dm %ds\n", years, months, weeks, days, hours, minutes, seconds)
 	now := time.Now()
 	remindTime := now.AddDate(years, months, weeks*7+days).Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second)
-	fmt.Printf(remindTime.Format(time.RFC3339))
+	fmt.Println(remindTime.Format(time.RFC3339))
 	if remindTime.Before(now) {
 		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
 		return responses[Rand.Intn(len(responses))], nil
