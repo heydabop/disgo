@@ -1149,6 +1149,33 @@ func meme(session *discordgo.Session, chanId, authorId, messageId string, args [
 	return link, nil
 }
 
+func bitrate(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	guildChans, err := session.GuildChannels(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	var chanRates UserMessageLengths
+	longestChanLength := 0
+	for _, guildChan := range guildChans {
+		if guildChan != nil && guildChan.Type == "voice" {
+			chanRates = append(chanRates, UserMessageLength{guildChan.Name, float64(guildChan.Bitrate) / 1000})
+			if len(guildChan.Name) > longestChanLength {
+				longestChanLength = len(guildChan.Name)
+			}
+		}
+	}
+	sort.Sort(&chanRates)
+	message := ""
+	for _, chanRates := range chanRates {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestChanLength)+"s - %.2fkbps\n", chanRates.AuthorId, chanRates.AvgLength)
+	}
+	return fmt.Sprintf("```%s```", message), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1156,6 +1183,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 	}
 	_, err = session.ChannelMessageSend(privateChannel.ID, `**asuh** - joins your voice channel
 **ayy**
+**bitrate** - shows voice channels and their bitrates
 **cputemp** - displays CPU temperature
 **cwc** - alias for /spam cwc2016
 **delete** - deletes last message sent by bot (if you caused it)
@@ -1237,6 +1265,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"oddshot":     Command(oddshot),
 		"remindme":    Command(remindme),
 		"meme":        Command(meme),
+		"bitrate":     Command(bitrate),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
