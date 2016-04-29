@@ -91,7 +91,7 @@ var typingTimer = make(map[string]*time.Timer)
 var currentVoiceSession *discordgo.VoiceConnection
 var currentVoiceTimer *time.Timer
 var ownUserId = ""
-var lastMessage discordgo.Message
+var lastMessage, lastCommandMessage discordgo.Message
 var lastAuthorId = ""
 var voiceMutex sync.Mutex
 var Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -640,10 +640,9 @@ func lastseen(session *discordgo.Session, chanId, authorId, messageId string, ar
 
 func deleteLastMessage(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	if lastAuthorId == authorId {
-		err := session.ChannelMessageDelete(lastMessage.ChannelID, lastMessage.ID)
-		if err != nil {
-			return "", err
-		}
+		session.ChannelMessageDelete(lastMessage.ChannelID, lastMessage.ID)
+		session.ChannelMessageDelete(lastCommandMessage.ChannelID, lastCommandMessage.ID)
+		session.ChannelMessageDelete(chanId, messageId)
 	}
 	return "", nil
 }
@@ -874,7 +873,7 @@ func asuh(session *discordgo.Session, chanId, authorId, messageId string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(21)
+		suh := Rand.Intn(25)
 		if err != nil {
 			return "", err
 		}
@@ -1268,6 +1267,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"remindme":    Command(remindme),
 		"meme":        Command(meme),
 		"bitrate":     Command(bitrate),
+		"commands":    Command(help),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -1289,6 +1289,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				if msgErr != nil {
 					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
 				} else {
+					lastCommandMessage = *m.Message
 					lastMessage = *message
 					lastAuthorId = m.Author.ID
 				}
@@ -1311,6 +1312,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 						}
 					}
 				}
+				lastCommandMessage = *m.Message
 				lastMessage = *message
 				lastAuthorId = m.Author.ID
 			}
