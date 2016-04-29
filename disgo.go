@@ -1276,6 +1276,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			if command[0] != "upvote" &&
 				command[0] != "downvote" &&
 				command[0] != "help" &&
+				command[0] != "commands" &&
 				command[0] != "rename" &&
 				command[0] != "delete" &&
 				command[0] != "asuh" &&
