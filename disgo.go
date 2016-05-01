@@ -241,14 +241,12 @@ func vote(session *discordgo.Session, chanId, authorId, messageId string, args [
 			return "Slow down champ.", nil
 		}
 	}
-	if authorId == userId {
-		if inc > 0 {
-			_, err := vote(session, chanId, ownUserId, messageId, []string{"<@" + authorId + ">"}, -1)
-			if err != nil {
-				return "", err
-			}
-			voteTime[authorId] = time.Now()
+	if authorId == userId && inc > 0 {
+		_, err := vote(session, chanId, ownUserId, messageId, []string{"<@" + authorId + ">"}, -1)
+		if err != nil {
+			return "", err
 		}
+		voteTime[authorId] = time.Now()
 		return "No.", nil
 	}
 
