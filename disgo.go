@@ -367,12 +367,9 @@ func votes(session *discordgo.Session, chanId, authorId, messageId string, args 
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s: %d, ", user.Username, vote.Karma)
+		finalString += fmt.Sprintf("%s — %d\n", user.Username, vote.Karma)
 	}
-	if len(finalString) >= 2 {
-		return finalString[:len(finalString)-2], nil
-	}
-	return "", nil
+	return finalString, nil
 }
 
 func roll(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -462,12 +459,9 @@ func top(session *discordgo.Session, chanId, authorId, messageId string, args []
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s: %d, ", user.Username, count.NumMessages)
+		finalString += fmt.Sprintf("%s — %d\n", user.Username, count.NumMessages)
 	}
-	if len(finalString) >= 2 {
-		return finalString[:len(finalString)-2], nil
-	}
-	return "", nil
+	return finalString, nil
 }
 
 func topLength(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -516,12 +510,9 @@ func topLength(session *discordgo.Session, chanId, authorId, messageId string, a
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s: %.2f, ", user.Username, length.AvgLength)
+		finalString += fmt.Sprintf("%s — %.2f\n", user.Username, length.AvgLength)
 	}
-	if len(finalString) >= 2 {
-		return finalString[:len(finalString)-2], nil
-	}
-	return "", nil
+	return finalString, nil
 }
 
 func rename(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
