@@ -1230,6 +1230,40 @@ func lastUserMessage(session *discordgo.Session, chanId, authorId, messageId str
 	return fmt.Sprintf("%s sent their last message %s ago", member.User.Username, timeSince), nil
 }
 
+func reminders(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	rows, err := sqlClient.Query("SELECT Time, Content FROM Reminder WHERE ChanId = ? AND AuthorId = ? AND Time > ? ORDER BY Time ASC", chanId, authorId, time.Now().Format(time.RFC3339Nano))
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	message := ""
+	for rows.Next() {
+		var content, timestamp string
+		err = rows.Scan(&timestamp, &content)
+		if err != nil {
+			return "", err
+		}
+		remindTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return "", err
+		}
+		message += fmt.Sprintf("%s — %s\n", remindTime.Format(time.RFC1123), content)
+	}
+	if len(message) < 1 {
+		return "You have no pending reminders.", nil
+	}
+	privateChannel, err := session.UserChannelCreate(authorId)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, message)
+	if err != nil {
+		return "", err
+	}
+	session.ChannelMessageDelete(chanId, messageId)
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1253,6 +1287,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
 **remindme** in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to take a dump)
+**reminders** - messages you your pending reminders
 **rename** [new username] - renames bot
 **roll** [sides (optional)] - "rolls" a die with <sides> sides
 **spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
@@ -1326,6 +1361,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"commands":    Command(help),
 		"age":         Command(age),
 		"lastmessage": Command(lastUserMessage),
+		"reminders":   Command(reminders),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -1339,7 +1375,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				command[0] != "delete" &&
 				command[0] != "asuh" &&
 				command[0] != "uq" &&
-				command[0] != "upquote" {
+				command[0] != "upquote" &&
+				command[0] != "reminders" {
 				s.ChannelTyping(m.ChannelID)
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, m.ID, command[1:])
