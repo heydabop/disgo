@@ -84,42 +84,45 @@ func (u UserMessageLengths) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
 }
 
-var sqlClient *sql.DB
-var voteTime = make(map[string]time.Time)
-var userIdRegex = regexp.MustCompile(`<@(\d+?)>`)
-var typingTimer = make(map[string]*time.Timer)
-var currentVoiceSession *discordgo.VoiceConnection
-var currentVoiceTimer *time.Timer
-var ownUserId = ""
-var lastMessage, lastCommandMessage discordgo.Message
-var lastAuthorId = ""
-var voiceMutex sync.Mutex
-var Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
-var lastQuoteIds = make(map[string]int64)
-var userIdUpQuotes = make(map[string][]string)
+var (
+	sqlClient                       *sql.DB
+	voteTime                        = make(map[string]time.Time)
+	userIdRegex                     = regexp.MustCompile(`<@(\d+?)>`)
+	typingTimer                     = make(map[string]*time.Timer)
+	currentVoiceSession             *discordgo.VoiceConnection
+	currentVoiceTimer               *time.Timer
+	ownUserId                       = ""
+	lastMessage, lastCommandMessage discordgo.Message
+	lastAuthorId                    = ""
+	voiceMutex                      sync.Mutex
+	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
+	lastQuoteIds                    = make(map[string]int64)
+	userIdUpQuotes                  = make(map[string][]string)
+	userGuilds                      = make(map[string]discordgo.Guild)
+)
 
 func timeSinceStr(timeSince time.Duration) string {
 	str := ""
 	if timeSince <= 1*time.Second {
-		str = "less than a second ago"
+		str = "less than a second"
 	} else if timeSince < 120*time.Second {
-		str = fmt.Sprintf("%.f seconds ago", timeSince.Seconds())
+		str = fmt.Sprintf("%.f seconds", timeSince.Seconds())
 	} else if timeSince < 120*time.Minute {
-		str = fmt.Sprintf("%.f minutes ago", timeSince.Minutes())
+		str = fmt.Sprintf("%.f minutes", timeSince.Minutes())
 	} else if timeSince < 48*time.Hour {
-		str = fmt.Sprintf("%.f hours ago", timeSince.Hours())
+		str = fmt.Sprintf("%.f hours", timeSince.Hours())
 	} else {
-		str = fmt.Sprintf("%.f days ago", timeSince.Hours()/24)
+		str = fmt.Sprintf("%.f days", timeSince.Hours()/24)
 	}
 	return str
 }
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
-	channel, err := session.State.Channel(chanId)
+	channel, err := session.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
-	guild, err := session.State.Guild(channel.GuildID)
+	guild, err := session.Guild(channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -626,7 +629,7 @@ func lastseen(session *discordgo.Session, chanId, authorId, messageId string, ar
 	}
 	timeSince := time.Since(lastOnline)
 	lastSeenStr := timeSinceStr(timeSince)
-	return fmt.Sprintf("%s was last seen %s", user.Username, lastSeenStr), nil
+	return fmt.Sprintf("%s was last seen %s ago", user.Username, lastSeenStr), nil
 }
 
 func deleteLastMessage(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -1071,7 +1074,7 @@ func oddshot(session *discordgo.Session, chanId, authorId, messageId string, arg
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/%s: %s\n%s", provider, streamer, title, timeSince), nil
+	return fmt.Sprintf("%s/%s: %s\n%s ago", provider, streamer, title, timeSince), nil
 }
 
 func remindme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
