@@ -1195,6 +1195,41 @@ func age(session *discordgo.Session, chanId, authorId, messageId string, args []
 	return fmt.Sprintf("%s has been here for %s", member.User.Username, timeSince), nil
 }
 
+func lastUserMessage(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No username provided")
+	}
+	userId, err := getMostSimilarUserId(session, chanId, strings.Join(args, " "))
+	if err != nil {
+		return "", err
+	}
+	channel, err := session.State.Channel(chanId)
+	if err != nil {
+		return "", err
+	}
+	member, err := session.State.Member(channel.GuildID, userId)
+	if err != nil {
+		return "", err
+	}
+	if member.User == nil {
+		return "", errors.New("No user found")
+	}
+	var timestamp string
+	err = sqlClient.QueryRow("SELECT Timestamp FROM Message WHERE ChanId = ? AND AuthorId = ? ORDER BY Timestamp DESC LIMIT 1", chanId, userId).Scan(&timestamp)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Sprintf("I've never seen %s say anything.", member.User.Username), nil
+		}
+		return "", err
+	}
+	timeSent, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		return "", err
+	}
+	timeSince := timeSinceStr(time.Now().Sub(timeSent))
+	return fmt.Sprintf("%s sent their last message %s ago", member.User.Username, timeSince), nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1212,6 +1247,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **forsen** - alias for /spam forsenlol
 **karma** [number (optional)] - displays top <number> users and their karma
 **lastseen** [username] - displays when <username> was last seen
+**lastseen** [username] - displays when <username> last sent a message
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **meme** - random meme from channel history
@@ -1289,6 +1325,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"bitrate":     Command(bitrate),
 		"commands":    Command(help),
 		"age":         Command(age),
+		"lastmessage": Command(lastUserMessage),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
