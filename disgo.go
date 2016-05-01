@@ -118,11 +118,11 @@ func timeSinceStr(timeSince time.Duration) string {
 }
 
 func getMostSimilarUserId(session *discordgo.Session, chanId, username string) (string, error) {
-	channel, err := session.Channel(chanId)
+	channel, err := session.State.Channel(chanId)
 	if err != nil {
 		return "", err
 	}
-	guild, err := session.Guild(channel.GuildID)
+	guild, err := session.State.Guild(channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -1466,10 +1466,16 @@ func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-c
 				if _, found := newGuilds[guildId]; !found {
 					res, err := http.PostForm("http://textbelt.com/text", url.Values{"number": {PHONE_NUMBER}, "message": {"Kicked from " + userGuilds[guildId].Name}})
 					if err != nil {
-						fmt.Println("Error sending SMS", err.Error)
+						fmt.Println("Error sending SMS", err.Error())
 					}
+					defer res.Body.Close()
 					if res.StatusCode != 200 {
 						fmt.Println("Error sending SMS status:", res.Status)
+						body, err := ioutil.ReadAll(res.Body)
+						if err != nil {
+							fmt.Println("Error reading response body", err.Error())
+						}
+						fmt.Println(body)
 					}
 				}
 			}
