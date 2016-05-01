@@ -1021,9 +1021,9 @@ func wlist(session *discordgo.Session, chanId, authorId, messageId string, args 
 		if err != nil {
 			return "", err
 		}
-		output[i] = fmt.Sprintf("%s: %.4f", author.Username, counts[i].AvgLength)
+		output[i] = fmt.Sprintf("%s — %.4f", author.Username, counts[i].AvgLength)
 	}
-	return strings.Join(output, ", "), nil
+	return strings.Join(output, "\n"), nil
 }
 
 func oddshot(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -1078,47 +1078,61 @@ func oddshot(session *discordgo.Session, chanId, authorId, messageId string, arg
 func remindme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	arg := strings.Join(args, " ")
 	fmt.Println(arg)
+	atTimeRegex := regexp.MustCompile(`(?i)(?:at\s+)?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[[:alpha:]]+)\s+to\s+(.*)`)
 	inTimeRegex := regexp.MustCompile(`(?i)(?:in)?\s*(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))\s?)+to\s+(.*)`)
-	match := inTimeRegex.FindStringSubmatch(arg)
-	fmt.Printf("%#v\n", match)
-	if match == nil || len(match) != 9 {
+	atMatch := atTimeRegex.FindStringSubmatch(arg)
+	inMatch := inTimeRegex.FindStringSubmatch(arg)
+	fmt.Printf("%#v\n", atMatch)
+	fmt.Printf("%#v\n", inMatch)
+	if atMatch == nil && inMatch == nil {
 		return "What?", nil
 	}
-	content := match[8]
-	var years, months, weeks, days int
-	var hours, minutes, seconds int64
-	var err error
-	years, err = strconv.Atoi(match[1])
-	if err != nil {
-		days = 0
-	}
-	months, err = strconv.Atoi(match[2])
-	if err != nil {
-		days = 0
-	}
-	weeks, err = strconv.Atoi(match[3])
-	if err != nil {
-		days = 0
-	}
-	days, err = strconv.Atoi(match[4])
-	if err != nil {
-		days = 0
-	}
-	hours, err = strconv.ParseInt(match[5], 10, 64)
-	if err != nil {
-		hours = 0
-	}
-	minutes, err = strconv.ParseInt(match[6], 10, 64)
-	if err != nil {
-		minutes = 0
-	}
-	seconds, err = strconv.ParseInt(match[7], 10, 64)
-	if err != nil {
-		seconds = 0
-	}
-	fmt.Printf("%dy %dm %dw %dd %dh %dm %ds\n", years, months, weeks, days, hours, minutes, seconds)
+	content := ""
 	now := time.Now()
-	remindTime := now.AddDate(years, months, weeks*7+days).Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second)
+	var remindTime time.Time
+	var err error
+	if atMatch != nil {
+		remindTime, err = time.Parse(`2006-01-02 15:04:05 MST`, atMatch[1])
+		if err != nil {
+			return "", err
+		}
+		content = atMatch[2]
+	} else {
+		content = inMatch[8]
+		var years, months, weeks, days int
+		var hours, minutes, seconds int64
+		var err error
+		years, err = strconv.Atoi(inMatch[1])
+		if err != nil {
+			days = 0
+		}
+		months, err = strconv.Atoi(inMatch[2])
+		if err != nil {
+			days = 0
+		}
+		weeks, err = strconv.Atoi(inMatch[3])
+		if err != nil {
+			days = 0
+		}
+		days, err = strconv.Atoi(inMatch[4])
+		if err != nil {
+			days = 0
+		}
+		hours, err = strconv.ParseInt(inMatch[5], 10, 64)
+		if err != nil {
+			hours = 0
+		}
+		minutes, err = strconv.ParseInt(inMatch[6], 10, 64)
+		if err != nil {
+			minutes = 0
+		}
+		seconds, err = strconv.ParseInt(inMatch[7], 10, 64)
+		if err != nil {
+			seconds = 0
+		}
+		fmt.Printf("%dy %dm %dw %dd %dh %dm %ds\n", years, months, weeks, days, hours, minutes, seconds)
+		remindTime = now.AddDate(years, months, weeks*7+days).Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second)
+	}
 	fmt.Println(remindTime.Format(time.RFC3339))
 	if remindTime.Before(now) {
 		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
@@ -1133,12 +1147,16 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 }
 
 func meme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
-	var link string
-	err := sqlClient.QueryRow(`SELECT Content FROM Message WHERE ChanId = ? AND Content LIKE 'http://%' OR Content LIKE 'https://%' ORDER BY RANDOM() LIMIT 1`, chanId).Scan(&link)
+	var opId, link string
+	err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND Content LIKE 'http://%' OR Content LIKE 'https://%' ORDER BY RANDOM() LIMIT 1`, chanId).Scan(&opId, &link)
 	if err != nil {
 		return "", err
 	}
-	return link, nil
+	op, err := session.User(opId)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s: %s", op.Username, link), nil
 }
 
 func bitrate(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -1281,15 +1299,20 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **forsen** - alias for /spam forsenlol
 **karma** [number (optional)] - displays top <number> users and their karma
 **lastseen** [username] - displays when <username> was last seen
-**lastseen** [username] - displays when <username> last sent a message
+**lastmessage** [username] - displays when <username> last sent a message
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
-**remindme** in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to take a dump)
+**remindme**
+	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to take a dump)
+	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 CDT to make a clever xd facebook status)
 **reminders** - messages you your pending reminders
-**rename** [new username] - renames bot
-**roll** [sides (optional)] - "rolls" a die with <sides> sides
+**rename** [new username] - renames bot`)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**roll** [sides (optional)] - "rolls" a die with <sides> sides
 **spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
 **spamuser** [username] - generates a message based on discord logs of <username>
@@ -1430,6 +1453,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		if err != nil {
 			fmt.Println("ERROR inserting into Message")
 			fmt.Println(err.Error())
+		}
+		err = s.ChannelMessageAck(m.ChannelID, m.ID)
+		if err != nil {
+			fmt.Println("Error ACKing message", err.Error())
 		}
 
 		if m.Author.ID == ownUserId {
