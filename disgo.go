@@ -1078,7 +1078,7 @@ func oddshot(session *discordgo.Session, chanId, authorId, messageId string, arg
 func remindme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	arg := strings.Join(args, " ")
 	fmt.Println(arg)
-	atTimeRegex := regexp.MustCompile(`(?i)(?:at\s+)?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[[:alpha:]]+)\s+to\s+(.*)`)
+	atTimeRegex := regexp.MustCompile(`(?i)(?:at\s+)?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[\+-]\d{4})\s+to\s+(.*)`)
 	inTimeRegex := regexp.MustCompile(`(?i)(?:in)?\s*(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))\s?)+to\s+(.*)`)
 	atMatch := atTimeRegex.FindStringSubmatch(arg)
 	inMatch := inTimeRegex.FindStringSubmatch(arg)
@@ -1092,7 +1092,7 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 	var remindTime time.Time
 	var err error
 	if atMatch != nil {
-		remindTime, err = time.Parse(`2006-01-02 15:04:05 MST`, atMatch[1])
+		remindTime, err = time.Parse(`2006-01-02 15:04:05 -0700`, atMatch[1])
 		if err != nil {
 			return "", err
 		}
@@ -1138,12 +1138,12 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
 		return responses[Rand.Intn(len(responses))], nil
 	}
-	_, err = sqlClient.Exec("INSERT INTO Reminder (ChanId, AuthorId, Time, Content) values (?, ?, ?, ?)", chanId, authorId, remindTime.Format(time.RFC3339), content)
+	_, err = sqlClient.Exec("INSERT INTO Reminder (ChanId, AuthorId, Time, Content) values (?, ?, ?, ?)", chanId, authorId, remindTime.In(time.FixedZone("UTC", 0)).Format(time.RFC3339), content)
 	if err != nil {
 		return "", err
 	}
 	time.AfterFunc(remindTime.Sub(now), func() { session.ChannelMessageSend(chanId, fmt.Sprintf("<@%s> %s", authorId, content)) })
-	return "👍", nil
+	return fmt.Sprintf("👍 %s", remindTime.Format(time.RFC1123Z)), nil
 }
 
 func meme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
@@ -1249,7 +1249,7 @@ func lastUserMessage(session *discordgo.Session, chanId, authorId, messageId str
 }
 
 func reminders(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
-	rows, err := sqlClient.Query("SELECT Time, Content FROM Reminder WHERE ChanId = ? AND AuthorId = ? AND Time > ? ORDER BY Time ASC", chanId, authorId, time.Now().Format(time.RFC3339Nano))
+	rows, err := sqlClient.Query("SELECT Time, Content FROM Reminder WHERE ChanId = ? AND AuthorId = ? AND Time > ? ORDER BY Time ASC", chanId, authorId, time.Now().In(time.FixedZone("UTC", 0)).Format(time.RFC3339Nano))
 	if err != nil {
 		return "", err
 	}
@@ -1265,7 +1265,7 @@ func reminders(session *discordgo.Session, chanId, authorId, messageId string, a
 		if err != nil {
 			return "", err
 		}
-		message += fmt.Sprintf("%s — %s\n", remindTime.Format(time.RFC1123), content)
+		message += fmt.Sprintf("%s — %s\n", remindTime.Format(time.RFC1123Z), content)
 	}
 	if len(message) < 1 {
 		return "You have no pending reminders.", nil
@@ -1305,8 +1305,8 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
 **remindme**
-	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to take a dump)
-	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 CDT to make a clever xd facebook status)
+	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
+	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **reminders** - messages you your pending reminders
 **rename** [new username] - renames bot`)
 	if err != nil {
@@ -1692,7 +1692,7 @@ func main() {
 	go kickChecker(client.UserGuilds, kickCheckTicker.C)
 
 	now := time.Now()
-	rows, err := sqlClient.Query("select ChanId, AuthorId, Time, Content from Reminder where Time > ?", now.Format(time.RFC3339))
+	rows, err := sqlClient.Query("select ChanId, AuthorId, Time, Content from Reminder where Time > ?", now.In(time.FixedZone("UTC", 0)).Format(time.RFC3339))
 	if err != nil {
 		fmt.Println("ERROR setting reminders", err)
 	}
