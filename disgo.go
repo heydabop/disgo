@@ -1148,7 +1148,7 @@ func remindme(session *discordgo.Session, chanId, authorId, messageId string, ar
 
 func meme(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	var opId, link string
-	err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND Content LIKE 'http://%' OR Content LIKE 'https://%' ORDER BY RANDOM() LIMIT 1`, chanId).Scan(&opId, &link)
+	err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND (Content LIKE 'http://%' OR Content LIKE 'https://%') ORDER BY RANDOM() LIMIT 1`, chanId).Scan(&opId, &link)
 	if err != nil {
 		return "", err
 	}
