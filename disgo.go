@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"encoding/xml"
@@ -12,6 +13,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+	"image"
+	imageColor "image/color"
+	"image/png"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -1282,6 +1286,67 @@ func reminders(session *discordgo.Session, chanId, authorId, messageId string, a
 	return "", nil
 }
 
+func color(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No color specificed")
+	}
+	hexColorRegex := regexp.MustCompile(`(?i)^#?([\dA-F]{8}|[\dA-F]{6}|[\dA-F]{3,4})$`)
+	hexColorMatch := hexColorRegex.FindStringSubmatch(args[0])
+	if hexColorMatch == nil {
+		return "", errors.New("Invalid color")
+	}
+	color := hexColorMatch[1]
+	if len(color) < 6 {
+		color = ""
+		for _, char := range hexColorMatch[1] {
+			color += string(char) + string(char)
+		}
+	}
+	hexParseRegex := regexp.MustCompile(`(?i)^([\dA-F]{2})?([\dA-F]{2})([\dA-F]{2})([\dA-F]{2})$`)
+	hexParseMatch := hexParseRegex.FindStringSubmatch(color)
+	if hexParseMatch == nil {
+		return "", errors.New("Invalid color")
+	}
+
+	var alpha64, red64, blue64, green64 uint64
+	var alpha, red, blue, green uint8
+	alpha64, err := strconv.ParseUint(hexParseMatch[1], 16, 8)
+	if err != nil {
+		alpha = 255
+	} else {
+		alpha = uint8(alpha64)
+	}
+	red64, err = strconv.ParseUint(hexParseMatch[2], 16, 8)
+	if err != nil {
+		return "", errors.New("Error parsing red value")
+	}
+	green64, err = strconv.ParseUint(hexParseMatch[3], 16, 8)
+	if err != nil {
+		return "", errors.New("Error parsing green value")
+	}
+	blue64, err = strconv.ParseUint(hexParseMatch[4], 16, 8)
+	if err != nil {
+		return "", errors.New("Error parsing blue value")
+	}
+	red, green, blue = uint8(red64), uint8(green64), uint8(blue64)
+
+	x, y := 500, 250
+	nrgbaImage := image.NewNRGBA(image.Rectangle{image.Point{0, 0}, image.Point{x, y}})
+	for i := 0; i < x; i++ {
+		for j := 0; j < y; j++ {
+			nrgbaImage.SetNRGBA(i, j, imageColor.NRGBA{red, green, blue, alpha})
+		}
+	}
+	imageBuffer := bytes.NewBuffer(make([]byte, 0, x*y))
+	png.Encode(imageBuffer, nrgbaImage)
+
+	_, err = session.ChannelFileSend(chanId, color+".png", imageBuffer)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanId, authorId, messageId string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorId)
 	if err != nil {
@@ -1291,6 +1356,7 @@ func help(session *discordgo.Session, chanId, authorId, messageId string, args [
 **age** [username] - displays how long [username] has been in this server
 **ayy**
 **bitrate** - shows voice channels and their bitrates
+**color** [hex color code] - generates a solid image of given color
 **cputemp** - displays CPU temperature
 **cwc** - alias for /spam cwc2016
 **delete** - deletes last message sent by bot (if you caused it)
@@ -1385,6 +1451,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"age":         Command(age),
 		"lastmessage": Command(lastUserMessage),
 		"reminders":   Command(reminders),
+		"color":       Command(color),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
