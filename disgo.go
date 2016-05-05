@@ -548,7 +548,7 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 		if err != nil {
 			return "", err
 		}
-		newSelf, err := session.UserUpdate(LOGIN_EMAIL, LOGIN_PASSWORD, newUsername, self.Avatar, "")
+		newSelf, err := session.UserUpdate(loginEmail, loginPassword, newUsername, self.Avatar, "")
 		if err != nil {
 			return "", err
 		}
@@ -757,7 +757,7 @@ func maths(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", errors.New("Can't do math without maths")
 	}
 	formula := strings.Join(args, " ")
-	res, err := http.Get(fmt.Sprintf("http://api.wolframalpha.com/v2/query?input=%s&appid=%s&format=plaintext", url.QueryEscape(formula), url.QueryEscape(WOLFRAM_APPID)))
+	res, err := http.Get(fmt.Sprintf("http://api.wolframalpha.com/v2/query?input=%s&appid=%s&format=plaintext", url.QueryEscape(formula), url.QueryEscape(wolframAppID)))
 	if err != nil {
 		return "", err
 	}
@@ -956,7 +956,6 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 			return "", err
 		}
 	}
-	words := WL_WORDS
 	rows, err := sqlClient.Query(`select AuthorId, Content from Message where ChanId = ? and Content not like '/%'`, chanID)
 	if err != nil {
 		return "", err
@@ -971,7 +970,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 		}
 		messageWords := strings.Fields(message)
 		for i, word := range messageWords {
-			_, found := words[word]
+			_, found := wlWords[word]
 			if found {
 				countMap[authorID]++
 				continue
@@ -979,7 +978,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 			if i+2 > len(messageWords) {
 				continue
 			}
-			_, found = words[strings.Join(messageWords[i:i+2], " ")]
+			_, found = wlWords[strings.Join(messageWords[i:i+2], " ")]
 			if found {
 				countMap[authorID]++
 				continue
@@ -987,7 +986,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 			if i+3 > len(messageWords) {
 				continue
 			}
-			_, found = words[strings.Join(messageWords[i:i+3], " ")]
+			_, found = wlWords[strings.Join(messageWords[i:i+3], " ")]
 			if found {
 				countMap[authorID]++
 				continue
@@ -995,7 +994,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 			if i+4 > len(messageWords) {
 				continue
 			}
-			_, found = words[strings.Join(messageWords[i:i+4], " ")]
+			_, found = wlWords[strings.Join(messageWords[i:i+4], " ")]
 			if found {
 				countMap[authorID]++
 				continue
@@ -1697,7 +1696,7 @@ func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-c
 			}
 			for guildID := range userGuilds {
 				if _, found := newGuilds[guildID]; !found {
-					res, err := http.PostForm("http://textbelt.com/text", url.Values{"number": {PHONE_NUMBER}, "message": {"Kicked from " + userGuilds[guildID].Name}})
+					res, err := http.PostForm("http://textbelt.com/text", url.Values{"number": {phoneNumber}, "message": {"Kicked from " + userGuilds[guildID].Name}})
 					if err != nil {
 						fmt.Println("Error sending SMS", err.Error())
 					}
@@ -1761,7 +1760,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := discordgo.New(LOGIN_EMAIL, LOGIN_PASSWORD)
+	client, err := discordgo.New(loginEmail, loginPassword)
 	if err != nil {
 		fmt.Println(err)
 		return
