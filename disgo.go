@@ -1483,7 +1483,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
 	oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
-	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`(?i)fuc.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)shit.*bot($|[[:space:]])`)}
+	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`(?i)fuc.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)shit.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)garbage.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)garbo.*bot($|[[:space:]])`)}
 	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	funcMap := map[string]Command{
@@ -1610,9 +1610,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			typingTimer.Stop()
 		}
 
-		if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
+		/*if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
-		}
+		}*/
 		for _, meanRegex := range meanRegexes {
 			if match := meanRegex.FindString(m.Content); match != "" {
 				respond := Rand.Intn(3)
@@ -1800,12 +1800,45 @@ func main() {
 			}
 		}
 	}()
+
 	userGuildsArr, err := client.UserGuilds()
 	if err != nil {
 		fmt.Println("Error getting user guilds", err.Error())
 	}
-	for _, guild := range userGuildsArr {
-		userGuilds[guild.ID] = *guild
+	tran, err := sqlClient.Begin()
+	if err != nil {
+		fmt.Println("Error starting transaction", err.Error())
+	} else {
+		now := time.Now()
+		for _, guild := range userGuildsArr {
+			userGuilds[guild.ID] = *guild
+			guild, err = client.Guild(guild.ID)
+			if err != nil {
+				fmt.Println("Error getting guild", err.Error())
+				continue
+			}
+			userMap := make(map[string]bool)
+			for _, presence := range guild.Presences {
+				gameName := ""
+				if presence.Game != nil {
+					gameName = presence.Game.Name
+				}
+				_, err := tran.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, presence.User.ID, now.Format(time.RFC3339Nano), presence.Status, gameName)
+				if err != nil {
+					fmt.Println("ERROR inserting into UserPresence DB", err.Error())
+				}
+				userMap[presence.User.ID] = true
+			}
+			for _, member := range guild.Members {
+				if _, found := userMap[member.User.ID]; !found {
+					_, err := tran.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, member.User.ID, now.Format(time.RFC3339Nano), "offline", "")
+					if err != nil {
+						fmt.Println("ERROR inserting into UserPresence DB", err.Error())
+					}
+				}
+			}
+		}
+		tran.Commit()
 	}
 
 	signals := make(chan os.Signal, 1)
