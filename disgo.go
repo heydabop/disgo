@@ -1151,7 +1151,7 @@ func remindme(session *discordgo.Session, chanID, authorID, messageID string, ar
 
 func meme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	var opID, link string
-	err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND (Content LIKE 'http://%' OR Content LIKE 'https://%') ORDER BY RANDOM() LIMIT 1`, chanID).Scan(&opID, &link)
+	err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND (Content LIKE 'http://%' OR Content LIKE 'https://%') AND AuthorId != ? ORDER BY RANDOM() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link)
 	if err != nil {
 		return "", err
 	}
@@ -1347,6 +1347,16 @@ func color(session *discordgo.Session, chanID, authorID, messageID string, args 
 }
 
 func playtime(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	var limit int
+	if len(args) < 1 {
+		limit = 10
+	} else {
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
 	channel, err := session.State.Channel(chanID)
 	if err != nil {
 		return "", err
@@ -1405,8 +1415,8 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 	sort.Sort(&gameTimes)
 	message := fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
-	for _, gameTime := range gameTimes {
-		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTime.AuthorID, gameTime.AvgLength)
+	for i := 0; i < limit && i < len(gameTimes); i++ {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
 	}
 	return fmt.Sprintf("```%s```", message), nil
 }
@@ -1434,7 +1444,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **math** [math stuff] - does math
 **meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
-**playtime** - shows summated (probably incorrect) playtime in hours of every game across all users
+**playtime** [number (optional) - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
