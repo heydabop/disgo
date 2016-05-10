@@ -869,7 +869,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(28)
+		suh := Rand.Intn(29)
 		if err != nil {
 			return "", err
 		}
@@ -1422,15 +1422,29 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 }
 
 func activity(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	channel, err := session.State.Channel(chanID)
-	if err != nil {
-		return "", err
+	var rows *sql.Rows
+	var err error
+	var username string
+	if len(args) > 0 {
+		var userID string
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		user, err := session.User(userID)
+		if err != nil {
+			return "", nil
+		}
+		username = user.Username
+		rows, err = sqlClient.Query("SELECT Timestamp FROM MESSAGE WHERE ChanId = ? AND AuthorId = ? ORDER BY Timestamp asc", chanID, userID)
+	} else {
+		rows, err = sqlClient.Query("SELECT Timestamp FROM MESSAGE WHERE ChanId = ? AND AuthorId != ? ORDER BY Timestamp asc", chanID, ownUserID)
 	}
-	rows, err := sqlClient.Query("SELECT Timestamp FROM MESSAGE WHERE ChanId = ? AND AuthorId != ? ORDER BY Timestamp asc", chanID, ownUserID)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	hourCount := make([]uint64, 24, 24)
 	var firstTime, lastTime, msgTime time.Time
 	if rows.Next() {
@@ -1501,7 +1515,11 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
-	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Messages / Hour"; set yrange [0:%.2f]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "#%s since %s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), math.Ceil(maxPerHour), channel.Name, firstTime.Format(time.RFC1123Z), datapointsFile.Name())).Run()
+	title := fmt.Sprintf("#%s since %s", channel.Name, firstTime.Format(time.RFC1123Z))
+	if len(username) > 0 {
+		title = fmt.Sprintf("%s in #%s since %s", username, channel.Name, firstTime.Format(time.RFC1123Z))
+	}
+	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Messages / Hour"; set yrange [0:%.2f]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), math.Ceil(maxPerHour), title, datapointsFile.Name())).Run()
 	if err != nil {
 		return "", nil
 	}
