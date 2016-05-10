@@ -1421,13 +1421,105 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	return fmt.Sprintf("```%s```", message), nil
 }
 
+func activity(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	rows, err := sqlClient.Query("SELECT Timestamp FROM MESSAGE WHERE ChanId = ? AND AuthorId != ? ORDER BY Timestamp asc", chanID, ownUserID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	hourCount := make([]uint64, 24, 24)
+	var firstTime, lastTime, msgTime time.Time
+	if rows.Next() {
+		var timestamp string
+		err = rows.Scan(&timestamp)
+		if err != nil {
+			return "", err
+		}
+		firstTime, err = time.Parse(time.RFC3339Nano, timestamp)
+		firstTime = firstTime.Local()
+		if err != nil {
+			return "", err
+		}
+		hourCount[firstTime.Hour()]++
+	}
+	for rows.Next() {
+		var timestamp string
+		err = rows.Scan(&timestamp)
+		if err != nil {
+			return "", err
+		}
+		msgTime, err = time.Parse(time.RFC3339Nano, timestamp)
+		msgTime = msgTime.Local()
+		if err != nil {
+			return "", err
+		}
+		hourCount[msgTime.Hour()]++
+	}
+
+	lastTime = msgTime
+	hours := lastTime.Sub(firstTime).Hours()
+	if hours < 48 {
+		return "", errors.New("Not enough data")
+	}
+	days := uint64(math.Floor(hours / 24))
+	totalHours := make([]uint64, 24, 24)
+	for i := 0; i <= 23; i++ {
+		totalHours[i] = days
+	}
+	extraHours := int(math.Floor(hours)) % 24
+	for i := firstTime.Hour(); i < extraHours+firstTime.Hour(); i++ {
+		totalHours[i%24]++
+	}
+	fmt.Println(firstTime)
+	fmt.Println(lastTime)
+	datapoints := ""
+	maxPerHour := float64(0)
+	for i := 0; i <= 23; i++ {
+		var messagesPerHour float64
+		messagesPerHour = float64(hourCount[i]) / float64(totalHours[i])
+		if messagesPerHour > maxPerHour {
+			maxPerHour = messagesPerHour
+		}
+		datapoints += fmt.Sprintf("%d %.2f\n", i, messagesPerHour)
+	}
+
+	datapointsFile, err := ioutil.TempFile("", "disgo")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(datapointsFile.Name())
+	plotFile, err := ioutil.TempFile("", "disgo")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(plotFile.Name())
+	err = ioutil.WriteFile(datapointsFile.Name(), []byte(datapoints), os.ModeTemporary)
+	if err != nil {
+		return "", err
+	}
+	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Messages / Hour"; set yrange [0:%.2f]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "#%s since %s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), math.Ceil(maxPerHour), channel.Name, firstTime.Format(time.RFC1123Z), datapointsFile.Name())).Run()
+	if err != nil {
+		return "", nil
+	}
+	_, err = session.ChannelFileSend(chanID, plotFile.Name()+".png", plotFile)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**asuh** - joins your voice channel
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**activity** - shows average messages per hour over lifetime of channel
 **age** [username] - displays how long [username] has been in this server
+**asuh** - joins your voice channel
 **ayy**
 **bitrate** - shows voice channels and their bitrates
 **color** [hex color code] - generates a solid image of given color
@@ -1528,6 +1620,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"reminders":   Command(reminders),
 		"color":       Command(color),
 		"playtime":    Command(playtime),
+		"activity":    Command(activity),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
