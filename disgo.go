@@ -1446,7 +1446,7 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 		return "", err
 	}
 	hourCount := make([]uint64, 24, 24)
-	var firstTime, lastTime, msgTime time.Time
+	var firstTime, msgTime time.Time
 	if rows.Next() {
 		var timestamp string
 		err = rows.Scan(&timestamp)
@@ -1474,31 +1474,13 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 		hourCount[msgTime.Hour()]++
 	}
 
-	lastTime = msgTime
-	hours := lastTime.Sub(firstTime).Hours()
-	if hours < 48 {
-		return "", errors.New("Not enough data")
-	}
-	days := uint64(math.Floor(hours / 24))
-	totalHours := make([]uint64, 24, 24)
-	for i := 0; i <= 23; i++ {
-		totalHours[i] = days
-	}
-	extraHours := int(math.Floor(hours)) % 24
-	for i := firstTime.Hour(); i < extraHours+firstTime.Hour(); i++ {
-		totalHours[i%24]++
-	}
-	fmt.Println(firstTime)
-	fmt.Println(lastTime)
 	datapoints := ""
-	maxPerHour := float64(0)
+	maxPerHour := uint64(0)
 	for i := 0; i <= 23; i++ {
-		var messagesPerHour float64
-		messagesPerHour = float64(hourCount[i]) / float64(totalHours[i])
-		if messagesPerHour > maxPerHour {
-			maxPerHour = messagesPerHour
+		if hourCount[i] > maxPerHour {
+			maxPerHour = hourCount[i]
 		}
-		datapoints += fmt.Sprintf("%d %.2f\n", i, messagesPerHour)
+		datapoints += fmt.Sprintf("%d %d\n", i, hourCount[i])
 	}
 
 	datapointsFile, err := ioutil.TempFile("", "disgo")
@@ -1515,11 +1497,12 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
+
 	title := fmt.Sprintf("#%s since %s", channel.Name, firstTime.Format(time.RFC1123Z))
 	if len(username) > 0 {
 		title = fmt.Sprintf("%s in #%s since %s", username, channel.Name, firstTime.Format(time.RFC1123Z))
 	}
-	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Messages / Hour"; set yrange [0:%.2f]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), math.Ceil(maxPerHour), title, datapointsFile.Name())).Run()
+	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Messages"; set yrange [0:%d]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), uint64(math.Ceil(float64(maxPerHour)*1.1)), title, datapointsFile.Name())).Run()
 	if err != nil {
 		return "", nil
 	}
