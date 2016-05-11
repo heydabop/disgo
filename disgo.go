@@ -1889,7 +1889,11 @@ func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
 }
 
 func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-	fmt.Printf("VOICE %20s %20s %20s %20s %t %t %t %t %t\n", v.UserID, v.SessionID, v.ChannelID, v.GuildID, v.Suppress, v.SelfMute, v.SelfDeaf, v.Mute, v.Deaf)
+	_, err := sqlClient.Exec("INSERT INTO VoiceState (GuildId, ChanId, UserId, SessionId, Deaf, Mute, SelfDeaf, SelfMute, Suppress, Timestamp) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		v.GuildID, v.ChannelID, v.UserID, v.SessionID, v.Deaf, v.Mute, v.SelfDeaf, v.SelfMute, v.Suppress, time.Now().Format(time.RFC3339Nano))
+	if err != nil {
+		fmt.Println("ERROR insert into VoiceState: ", err.Error())
+	}
 }
 
 func main() {
