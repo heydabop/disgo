@@ -189,6 +189,7 @@ func spam(session *discordgo.Session, chanID, authorID, messageID string, args [
 			files[i] = strings.Replace(files[i], "./", "", 1)
 			files[i] = strings.Replace(files[i], "_nolink", "", 1)
 		}
+		sort.Strings(files)
 		return strings.Join(files, ", "), nil
 	}
 	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
