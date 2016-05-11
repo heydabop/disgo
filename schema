@@ -5,3 +5,4 @@ CREATE TABLE Vote(Id integer primary key autoincrement, GuildId varchar(30), Mes
 CREATE TABLE Message(Id unsigned big int primary key, ChanId varchar(30), AuthorId varchar(30), Timestamp text, Content text);
 CREATE TABLE DiscordQuote (Id integer primary key autoincrement, ChanId varchar(30), AuthorId varchar(30) null, Content text, Score integer, IsFresh bit);
 CREATE TABLE Reminder(Id integer primary key autoincrement, ChanId varchar(30), AuthorId varchar(30), Time text, Content text);
+CREATE TABLE VoiceState(Id integer primary key autoincrement, GuildId varchar(30), ChanId varchar(30), UserId varchar(30), SessionId varchar(60), Deaf bit, Mute bit, SelfDeaf bit, SelfMute bit, Suppress bit, Timestamp text);
