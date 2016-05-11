@@ -591,9 +591,15 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
-	userID, err := getMostSimilarUserID(session, chanID, strings.Join(args, " "))
-	if err != nil {
-		return "", err
+	var userID string
+	var err error
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		if err != nil {
+			return "", err
+		}
 	}
 	user, err := session.User(userID)
 	if err != nil {
@@ -659,9 +665,15 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
-	userID, err := getMostSimilarUserID(session, chanID, strings.Join(args, " "))
-	if err != nil {
-		return "", err
+	var userID string
+	var err error
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		if err != nil {
+			return "", err
+		}
 	}
 	user, err := session.User(userID)
 	if err != nil {
@@ -1193,9 +1205,15 @@ func age(session *discordgo.Session, chanID, authorID, messageID string, args []
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
-	userID, err := getMostSimilarUserID(session, chanID, strings.Join(args, " "))
-	if err != nil {
-		return "", err
+	var userID string
+	var err error
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		if err != nil {
+			return "", err
+		}
 	}
 	channel, err := session.State.Channel(chanID)
 	if err != nil {
@@ -1220,9 +1238,15 @@ func lastUserMessage(session *discordgo.Session, chanID, authorID, messageID str
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
-	userID, err := getMostSimilarUserID(session, chanID, strings.Join(args, " "))
-	if err != nil {
-		return "", err
+	var userID string
+	var err error
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		if err != nil {
+			return "", err
+		}
 	}
 	channel, err := session.State.Channel(chanID)
 	if err != nil {
@@ -1361,7 +1385,7 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? ORDER BY Timestamp ASC", channel.GuildID)
+	rows, err := sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID)
 	if err != nil {
 		return "", err
 	}
@@ -1427,7 +1451,15 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	var username string
 	if len(args) > 0 {
 		var userID string
-		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		var err error
+		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+			userID = match[1]
+		} else {
+			userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+			if err != nil {
+				return "", nil
+			}
+		}
 		user, err := session.User(userID)
 		if err != nil {
 			return "", nil
@@ -1856,6 +1888,10 @@ func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
 	}
 }
 
+func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+	fmt.Printf("VOICE %20s %20s %20s %20s %t %t %t %t %t\n", v.UserID, v.SessionID, v.ChannelID, v.GuildID, v.Suppress, v.SelfMute, v.SelfDeaf, v.Mute, v.Deaf)
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -1880,7 +1916,8 @@ func main() {
 
 	client.AddHandler(makeMessageCreate())
 	client.AddHandler(handlePresenceUpdate)
-	client.AddHandler(handleTypingStart)
+	//client.AddHandler(handleTypingStart)
+	client.AddHandler(handleVoiceUpdate)
 	client.Open()
 	defer client.Close()
 	defer client.Logout()
