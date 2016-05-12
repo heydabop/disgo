@@ -176,6 +176,58 @@ func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (
 	return maxUserID, nil
 }
 
+func getGameTimesFromRows(rows *sql.Rows) (UserMessageLengths, time.Time, int, error) {
+	userGame := make(map[string]string)
+	userTime := make(map[string]time.Time)
+	gameTime := make(map[string]float64)
+	firstTime := time.Now()
+	for rows.Next() {
+		var userID, timestamp, game string
+		err := rows.Scan(&userID, &timestamp, &game)
+		if err != nil {
+			return make(UserMessageLengths, 0), time.Now(), 0, err
+		}
+		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return make(UserMessageLengths, 0), time.Now(), 0, err
+		}
+
+		if currTime.Before(firstTime) {
+			firstTime = currTime
+		}
+		lastGame, found := userGame[userID]
+		if !found && len(game) >= 1 {
+			userGame[userID] = game
+			userTime[userID] = currTime
+			continue
+		}
+
+		if lastGame == game {
+			continue
+		}
+		lastTime := userTime[userID]
+		gameTime[lastGame] += currTime.Sub(lastTime).Hours()
+
+		if len(game) < 1 {
+			delete(userGame, userID)
+			delete(userTime, userID)
+		} else {
+			userGame[userID] = game
+			userTime[userID] = currTime
+		}
+	}
+	gameTimes := make(UserMessageLengths, 0)
+	longestGameLength := 0
+	for game, time := range gameTime {
+		gameTimes = append(gameTimes, UserMessageLength{game, time})
+		if len(game) > longestGameLength {
+			longestGameLength = len(game)
+		}
+	}
+	sort.Sort(&gameTimes)
+	return gameTimes, firstTime, longestGameLength, nil
+}
+
 func spam(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	if len(args) < 1 {
 		cmd := exec.Command("find", "-iname", "*_nolink")
@@ -1387,7 +1439,7 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 		var err error
 		limit, err = strconv.Atoi(args[0])
 		if limit < 0 {
-			return "", err
+			return "", nil
 		}
 		if err != nil { //try user mention
 			limit = 10
@@ -1414,54 +1466,113 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 	defer rows.Close()
 
-	userGame := make(map[string]string)
-	userTime := make(map[string]time.Time)
-	gameTime := make(map[string]float64)
-	firstTime := time.Now()
-	for rows.Next() {
-		var userID, timestamp, game string
-		err = rows.Scan(&userID, &timestamp, &game)
-		if err != nil {
-			return "", err
-		}
-		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
-		if err != nil {
-			return "", err
-		}
+	gameTimes, firstTime, longestGameLength, err := getGameTimesFromRows(rows)
+	if err != nil {
+		return "", err
+	}
 
-		if currTime.Before(firstTime) {
-			firstTime = currTime
-		}
-		lastGame, found := userGame[userID]
-		if !found && len(game) >= 1 {
-			userGame[userID] = game
-			userTime[userID] = currTime
-			continue
-		}
+	var message string
+	if user != nil {
+		message = fmt.Sprintf("%s since %s\n", user.Username, firstTime.Format(time.RFC1123Z))
+	} else {
+		message = fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
+	}
+	for i := 0; i < limit && i < len(gameTimes); i++ {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
+	}
+	return fmt.Sprintf("```%s```", message), nil
+}
 
-		if lastGame == game {
-			continue
-		}
-		lastTime := userTime[userID]
-		gameTime[lastGame] += currTime.Sub(lastTime).Hours()
+func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	now := time.Now()
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 
-		if len(game) < 1 {
-			delete(userGame, userID)
-			delete(userTime, userID)
-		} else {
-			userGame[userID] = game
-			userTime[userID] = currTime
+	inTimeRegex := regexp.MustCompile(`(?i)(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))\s?)+(?:\s*(.*))?`)
+	match := inTimeRegex.FindStringSubmatch(strings.Join(args, " "))
+	if match == nil {
+		return "What?", nil
+	}
+	fmt.Printf("%#v\n", match)
+	selectionArg := match[8]
+	var years, months, weeks, days int
+	var hours, minutes, seconds int64
+	years, err = strconv.Atoi(match[1])
+	if err != nil {
+		days = 0
+	}
+	months, err = strconv.Atoi(match[2])
+	if err != nil {
+		days = 0
+	}
+	weeks, err = strconv.Atoi(match[3])
+	if err != nil {
+		days = 0
+	}
+	days, err = strconv.Atoi(match[4])
+	if err != nil {
+		days = 0
+	}
+	hours, err = strconv.ParseInt(match[5], 10, 64)
+	if err != nil {
+		hours = 0
+	}
+	minutes, err = strconv.ParseInt(match[6], 10, 64)
+	if err != nil {
+		minutes = 0
+	}
+	seconds, err = strconv.ParseInt(match[7], 10, 64)
+	if err != nil {
+		seconds = 0
+	}
+	err = nil
+	fmt.Printf("%dy %dm %dw %dd %dh %dm %ds\n", years, months, weeks, days, hours, minutes, seconds)
+	startTime := now.AddDate(-years, -months, -weeks*7-days).Add(time.Duration(-hours)*time.Hour + time.Duration(-minutes)*time.Minute + time.Duration(-seconds)*time.Second)
+	fmt.Println(startTime.Format(time.RFC3339))
+
+	limit := 10
+	var userID string
+	var rows *sql.Rows
+	var user *discordgo.User
+	if len(strings.Fields(selectionArg)) >= 1 {
+		var err error
+		limit, err = strconv.Atoi(selectionArg)
+		if limit < 0 {
+			return "", nil
+		}
+		if err != nil { //try user mention
+			err = nil
+			limit = 10
+			if match := userIDRegex.FindStringSubmatch(selectionArg); match != nil {
+				userID = match[1]
+			} else {
+				userID, err = getMostSimilarUserID(session, chanID, selectionArg)
+				if err != nil {
+					return "", err
+				}
+			}
+			user, err = session.User(userID)
+			if err != nil {
+				return "", err
+			}
+			rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId = ? AND Timestamp > ? ORDER BY Timestamp ASC", channel.GuildID, userID, startTime.Format(time.RFC3339))
 		}
 	}
-	gameTimes := make(UserMessageLengths, 0)
-	longestGameLength := 0
-	for game, time := range gameTime {
-		gameTimes = append(gameTimes, UserMessageLength{game, time})
-		if len(game) > longestGameLength {
-			longestGameLength = len(game)
-		}
+	if rows == nil {
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND Timestamp > ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID, startTime.Format(time.RFC3339))
 	}
-	sort.Sort(&gameTimes)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	gameTimes, firstTime, longestGameLength, err := getGameTimesFromRows(rows)
+	if err != nil {
+		return "", err
+	}
+
 	var message string
 	if user != nil {
 		message = fmt.Sprintf("%s since %s\n", user.Username, firstTime.Format(time.RFC1123Z))
@@ -1599,6 +1710,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
 **playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
+**recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
@@ -1641,48 +1753,49 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	funcMap := map[string]Command{
-		"spam":        Command(spam),
-		"soda":        Command(soda),
-		"lirik":       Command(lirik),
-		"forsen":      Command(forsen),
-		"roll":        Command(roll),
-		"help":        Command(help),
-		"upvote":      Command(upvote),
-		"downvote":    Command(downvote),
-		"votes":       Command(votes),
-		"karma":       Command(votes),
-		"uptime":      Command(uptime),
-		"twitch":      Command(twitch),
-		"top":         Command(top),
-		"toplength":   Command(topLength),
-		"rename":      Command(rename),
-		"lastseen":    Command(lastseen),
-		"delete":      Command(deleteLastMessage),
-		"cwc":         Command(cwc),
-		"kickme":      Command(kickme),
-		"spamuser":    Command(spamuser),
-		"math":        Command(maths),
-		"cputemp":     Command(temp),
-		"ayy":         Command(ayy),
-		"spamdiscord": Command(spamdiscord),
-		"ping":        Command(ping),
-		"xd":          Command(xd),
-		"asuh":        Command(asuh),
-		"upquote":     Command(upquote),
-		"uq":          Command(upquote),
-		"topquote":    Command(topquote),
-		"8ball":       Command(eightball),
-		"oddshot":     Command(oddshot),
-		"remindme":    Command(remindme),
-		"meme":        Command(meme),
-		"bitrate":     Command(bitrate),
-		"commands":    Command(help),
-		"age":         Command(age),
-		"lastmessage": Command(lastUserMessage),
-		"reminders":   Command(reminders),
-		"color":       Command(color),
-		"playtime":    Command(playtime),
-		"activity":    Command(activity),
+		"spam":           Command(spam),
+		"soda":           Command(soda),
+		"lirik":          Command(lirik),
+		"forsen":         Command(forsen),
+		"roll":           Command(roll),
+		"help":           Command(help),
+		"upvote":         Command(upvote),
+		"downvote":       Command(downvote),
+		"votes":          Command(votes),
+		"karma":          Command(votes),
+		"uptime":         Command(uptime),
+		"twitch":         Command(twitch),
+		"top":            Command(top),
+		"toplength":      Command(topLength),
+		"rename":         Command(rename),
+		"lastseen":       Command(lastseen),
+		"delete":         Command(deleteLastMessage),
+		"cwc":            Command(cwc),
+		"kickme":         Command(kickme),
+		"spamuser":       Command(spamuser),
+		"math":           Command(maths),
+		"cputemp":        Command(temp),
+		"ayy":            Command(ayy),
+		"spamdiscord":    Command(spamdiscord),
+		"ping":           Command(ping),
+		"xd":             Command(xd),
+		"asuh":           Command(asuh),
+		"upquote":        Command(upquote),
+		"uq":             Command(upquote),
+		"topquote":       Command(topquote),
+		"8ball":          Command(eightball),
+		"oddshot":        Command(oddshot),
+		"remindme":       Command(remindme),
+		"meme":           Command(meme),
+		"bitrate":        Command(bitrate),
+		"commands":       Command(help),
+		"age":            Command(age),
+		"lastmessage":    Command(lastUserMessage),
+		"reminders":      Command(reminders),
+		"color":          Command(color),
+		"playtime":       Command(playtime),
+		"recentplaytime": Command(recentPlaytime),
+		"activity":       Command(activity),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
