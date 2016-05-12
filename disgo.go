@@ -1372,25 +1372,48 @@ func color(session *discordgo.Session, chanID, authorID, messageID string, args 
 }
 
 func playtime(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+
 	var limit int
+	var userID string
+	var rows *sql.Rows
+	var user *discordgo.User
 	if len(args) < 1 {
 		limit = 10
 	} else {
 		var err error
 		limit, err = strconv.Atoi(args[0])
-		if err != nil || limit < 0 {
+		if limit < 0 {
 			return "", err
 		}
+		if err != nil { //try user mention
+			limit = 10
+			if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+				userID = match[1]
+			} else {
+				userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+				if err != nil {
+					return "", err
+				}
+			}
+			user, err = session.User(userID)
+			if err != nil {
+				return "", err
+			}
+			rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId = ? ORDER BY Timestamp ASC", channel.GuildID, userID)
+		}
 	}
-	channel, err := session.State.Channel(chanID)
-	if err != nil {
-		return "", err
+	if rows == nil {
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID)
 	}
-	rows, err := sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
+
 	userGame := make(map[string]string)
 	userTime := make(map[string]time.Time)
 	gameTime := make(map[string]float64)
@@ -1439,7 +1462,12 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 		}
 	}
 	sort.Sort(&gameTimes)
-	message := fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
+	var message string
+	if user != nil {
+		message = fmt.Sprintf("%s since %s\n", user.Username, firstTime.Format(time.RFC1123Z))
+	} else {
+		message = fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
+	}
 	for i := 0; i < limit && i < len(gameTimes); i++ {
 		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
 	}
@@ -1570,7 +1598,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **math** [math stuff] - does math
 **meme** - random meme from channel history
 **ping** - displays ping to discordapp.com
-**playtime** [number (optional) - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users
+**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
