@@ -1708,18 +1708,18 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **meme** - random meme from channel history
-**ping** - displays ping to discordapp.com
-**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
+**ping** - displays ping to discordapp.com`)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
 **recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **reminders** - messages you your pending reminders
-**rename** [new username] - renames bot`)
-	if err != nil {
-		return "", err
-	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**roll** [sides (optional)] - "rolls" a die with <sides> sides
+**rename** [new username] - renames bot
+**roll** [sides (optional)] - "rolls" a die with <sides> sides
 **spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
 **spamuser** [username] - generates a message based on discord logs of <username>
