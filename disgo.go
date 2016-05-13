@@ -850,8 +850,8 @@ func maths(session *discordgo.Session, chanID, authorID, messageID string, args 
 	return "", errors.New("No suitable answer found")
 }
 
-func temp(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	output, err := exec.Command("sensors", "-f", "coretemp-isa-0000").Output()
+func cputemp(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	output, err := exec.Command("sensors", "coretemp-isa-0000").Output()
 	if err != nil {
 		return "", err
 	}
@@ -1785,7 +1785,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"kickme":         Command(kickme),
 		"spamuser":       Command(spamuser),
 		"math":           Command(maths),
-		"cputemp":        Command(temp),
+		"cputemp":        Command(cputemp),
 		"ayy":            Command(ayy),
 		"spamdiscord":    Command(spamdiscord),
 		"ping":           Command(ping),
