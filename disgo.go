@@ -103,6 +103,7 @@ var (
 	lastQuoteIDs                    = make(map[string]int64)
 	userIDUpQuotes                  = make(map[string][]string)
 	userGuilds                      = make(map[string]discordgo.Guild)
+	startTime                       = time.Now()
 )
 
 func timeSinceStr(timeSince time.Duration) string {
@@ -1685,6 +1686,15 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	return "", nil
 }
 
+func botuptime(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	uptime := time.Since(startTime)
+	days := "days"
+	if int(uptime.Hours()/24) == 1 {
+		days = "day"
+	}
+	return fmt.Sprintf("%.f %s %02d:%02d", uptime.Hours()/24, days, uint64(math.Floor(uptime.Hours()))%24, uint64(math.Floor(uptime.Minutes()))%60), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -1695,6 +1705,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **asuh** - joins your voice channel
 **ayy**
 **bitrate** - shows voice channels and their bitrates
+**botuptime** - shows time since bot last started
 **color** [hex color code] - generates a solid image of given color
 **cputemp** - displays CPU temperature
 **cwc** - alias for /spam cwc2016
@@ -1796,6 +1807,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"playtime":       Command(playtime),
 		"recentplaytime": Command(recentPlaytime),
 		"activity":       Command(activity),
+		"botuptime":      Command(botuptime),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
