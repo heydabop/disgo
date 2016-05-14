@@ -42,6 +42,7 @@ type TwitchChannel struct {
 	Name        string `json:"name"`
 	Status      string `json:"status"`
 }
+
 type TwitchStream struct {
 	ID          int           `json:"_id"`
 	AverageFps  float64       `json:"average_fps"`
@@ -88,22 +89,48 @@ func (u UserMessageLengths) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
 }
 
+type NestCurrentWeather struct {
+	TempF     float64 `json:"temp_f"`
+	Condition string  `json:"condition"`
+	Humidity  int     `json:"humidity"`
+}
+type NestWeather struct {
+	Current NestCurrentWeather `json:"current"`
+}
+type NestWeatherResponse map[string]NestWeather
+
+type NestDevice struct {
+	CurrentHumidity int    `json:"current_humidity"`
+	PostalCode      string `json:"postal_code"`
+}
+type NestShared struct {
+	AutoAway              int     `json:"auto_away"`
+	CurrentTemperatrue    float64 `json:"current_temperature"`
+	TargetTemperature     float64 `json:"target_temperature"`
+	TargetTemperatureType string  `json:"target_temperature_type"`
+}
+type NestResponse struct {
+	Device map[string]NestDevice `json:"device"`
+	Shared map[string]NestShared `json:"shared"`
+}
+
 var (
 	sqlClient                       *sql.DB
 	voteTime                        = make(map[string]time.Time)
 	userIDRegex                     = regexp.MustCompile(`<@(\d+?)>`)
 	typingTimer                     = make(map[string]*time.Timer)
+	voiceMutex                      sync.Mutex
 	currentVoiceSession             *discordgo.VoiceConnection
 	currentVoiceTimer               *time.Timer
-	ownUserID                       = ""
+	ownUserID                       string
 	lastMessage, lastCommandMessage discordgo.Message
-	lastAuthorID                    = ""
-	voiceMutex                      sync.Mutex
+	lastAuthorID                    string
 	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
 	lastQuoteIDs                    = make(map[string]int64)
 	userIDUpQuotes                  = make(map[string][]string)
 	userGuilds                      = make(map[string]discordgo.Guild)
 	startTime                       = time.Now()
+	nestAwayTypes                   = []string{"Home", "Away", "Auto-Away"}
 )
 
 func timeSinceStr(timeSince time.Duration) string {
@@ -1695,6 +1722,70 @@ func botuptime(session *discordgo.Session, chanID, authorID, messageID string, a
 	return fmt.Sprintf("%.f %s %02d:%02d", uptime.Hours()/24, days, uint64(math.Floor(uptime.Hours()))%24, uint64(math.Floor(uptime.Minutes()))%60), nil
 }
 
+func nest(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	req, err := http.NewRequest("GET", nestTransportUrl+"/v2/mobile/"+nestUser, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Authorization", "Basic "+nestToken)
+	req.Header.Add("X-nl-user-id", nestUser)
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	var nestResp NestResponse
+	err = json.Unmarshal(body, &nestResp)
+	if err != nil {
+		return "", err
+	}
+	device, found := nestResp.Device[nestSerial]
+	if !found {
+		return "", errors.New("No device with serial")
+	}
+	shared, found := nestResp.Shared[nestSerial]
+	if !found {
+		return "", errors.New("No shared with serial")
+	}
+
+	weatherResp, err := http.Get(nestWeatherUrl + device.PostalCode)
+	if err != nil {
+		return "", err
+	}
+	defer weatherResp.Body.Close()
+	body, err = ioutil.ReadAll(weatherResp.Body)
+	if err != nil {
+		return "", err
+	}
+	var nestWeather NestWeatherResponse
+	err = json.Unmarshal(body, &nestWeather)
+	if err != nil {
+		return "", err
+	}
+	weather, found := nestWeather[device.PostalCode]
+	if !found {
+		return "", errors.New("Unable to find weather for postal code")
+	}
+	return fmt.Sprintf("Inside (%s): %.1f °F (%s target: %.1f °F); %d%% humidity\nOutside: %.1f °F; %d%% humidity; %s",
+			nestAwayTypes[shared.AutoAway],
+			shared.CurrentTemperatrue*1.8+32,
+			shared.TargetTemperatureType,
+			shared.TargetTemperature*1.8+32,
+			device.CurrentHumidity,
+			weather.Current.TempF,
+			weather.Current.Humidity,
+			weather.Current.Condition),
+		nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -1808,6 +1899,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"recentplaytime": Command(recentPlaytime),
 		"activity":       Command(activity),
 		"botuptime":      Command(botuptime),
+		"nest":           Command(nest),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
