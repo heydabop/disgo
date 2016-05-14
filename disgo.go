@@ -99,9 +99,15 @@ type NestWeather struct {
 }
 type NestWeatherResponse map[string]NestWeather
 
+type NestStructure struct {
+	Away bool `json:"away"`
+}
 type NestDevice struct {
-	CurrentHumidity int    `json:"current_humidity"`
-	PostalCode      string `json:"postal_code"`
+	AwayTemperatureHigh float64 `json:"away_temperature_high"`
+	AwayTemperatureLow  float64 `json:"away_temperature_low"`
+	CurrentHumidity     int     `json:"current_humidity"`
+	PostalCode          string  `json:"postal_code"`
+	TimeToTarget        int64   `json:"time_to_target"`
 }
 type NestShared struct {
 	AutoAway              int     `json:"auto_away"`
@@ -110,8 +116,9 @@ type NestShared struct {
 	TargetTemperatureType string  `json:"target_temperature_type"`
 }
 type NestResponse struct {
-	Device map[string]NestDevice `json:"device"`
-	Shared map[string]NestShared `json:"shared"`
+	Device    map[string]NestDevice    `json:"device"`
+	Shared    map[string]NestShared    `json:"shared"`
+	Structure map[string]NestStructure `json:"structure"`
 }
 
 var (
@@ -120,7 +127,6 @@ var (
 	lastAuthorID                    string
 	lastMessage, lastCommandMessage discordgo.Message
 	lastQuoteIDs                    = make(map[string]int64)
-	nestAwayTypes                   = []string{"Home", "Away", "Auto-Away"}
 	ownUserID                       string
 	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
 	startTime                       = time.Now()
@@ -1755,6 +1761,10 @@ func nest(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if !found {
 		return "", errors.New("No shared with serial")
 	}
+	structure, found := nestResp.Structure[nestStructureID]
+	if !found {
+		return "", errors.New("No structure with ID")
+	}
 
 	weatherResp, err := http.Get(nestWeatherUrl + device.PostalCode)
 	if err != nil {
@@ -1774,11 +1784,25 @@ func nest(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if !found {
 		return "", errors.New("Unable to find weather for postal code")
 	}
-	return fmt.Sprintf("Inside (%s): %.1f °F (%s target: %.1f °F); %d%% humidity\nOutside: %.1f °F; %d%% humidity; %s",
-			nestAwayTypes[shared.AutoAway],
+	homeStr := "Home"
+	if shared.AutoAway == 2 {
+		homeStr = "Auto-Away"
+	} else if structure.Away {
+		homeStr = "Away"
+	}
+	targetStr := fmt.Sprintf("%s target: %.1f °F", shared.TargetTemperatureType, shared.TargetTemperature*1.8+32)
+	if structure.Away {
+		targetStr = fmt.Sprintf("target: %.1f-%.1f °F", device.AwayTemperatureLow*1.8+32, device.AwayTemperatureHigh*1.8+32)
+	}
+	if device.TimeToTarget > 0 {
+		targetTime := time.Unix(device.TimeToTarget, 0)
+		minutes := targetTime.Sub(time.Now()).Minutes()
+		targetStr += fmt.Sprintf(" in %.f minutes", minutes)
+	}
+	return fmt.Sprintf("Inside (%s): %.1f °F (%s); %d%% humidity\nOutside: %.1f °F; %d%% humidity; %s",
+			homeStr,
 			shared.CurrentTemperatrue*1.8+32,
-			shared.TargetTemperatureType,
-			shared.TargetTemperature*1.8+32,
+			targetStr,
 			device.CurrentHumidity,
 			weather.Current.TempF,
 			weather.Current.Humidity,
