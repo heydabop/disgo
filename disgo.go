@@ -115,22 +115,22 @@ type NestResponse struct {
 }
 
 var (
-	sqlClient                       *sql.DB
-	voteTime                        = make(map[string]time.Time)
-	userIDRegex                     = regexp.MustCompile(`<@(\d+?)>`)
-	typingTimer                     = make(map[string]*time.Timer)
-	voiceMutex                      sync.Mutex
 	currentVoiceSession             *discordgo.VoiceConnection
 	currentVoiceTimer               *time.Timer
-	ownUserID                       string
-	lastMessage, lastCommandMessage discordgo.Message
 	lastAuthorID                    string
-	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
+	lastMessage, lastCommandMessage discordgo.Message
 	lastQuoteIDs                    = make(map[string]int64)
-	userIDUpQuotes                  = make(map[string][]string)
-	userGuilds                      = make(map[string]discordgo.Guild)
-	startTime                       = time.Now()
 	nestAwayTypes                   = []string{"Home", "Away", "Auto-Away"}
+	ownUserID                       string
+	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
+	startTime                       = time.Now()
+	sqlClient                       *sql.DB
+	typingTimer                     = make(map[string]*time.Timer)
+	userGuilds                      = make(map[string]discordgo.Guild)
+	userIDRegex                     = regexp.MustCompile(`<@(\d+?)>`)
+	userIDUpQuotes                  = make(map[string][]string)
+	voiceMutex                      sync.Mutex
+	voteTime                        = make(map[string]time.Time)
 )
 
 func timeSinceStr(timeSince time.Duration) string {
