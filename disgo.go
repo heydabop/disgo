@@ -1875,7 +1875,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
 	oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
-	meanRegexes := []*regexp.Regexp{regexp.MustCompile(`(?i)fuc.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)shit.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)garbage.*bot($|[[:space:]])`), regexp.MustCompile(`(?i)garbo.*bot($|[[:space:]])`)}
+	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
 	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	funcMap := map[string]Command{
@@ -2009,16 +2009,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		/*if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
-		for _, meanRegex := range meanRegexes {
-			if match := meanRegex.FindString(m.Content); match != "" {
-				respond := Rand.Intn(3)
-				if respond == 0 {
-					responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
-					_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
-					if err != nil {
-						fmt.Println("Error sending response " + err.Error())
-					}
-					break
+		if match := meanRegex.FindString(m.Content); match != "" {
+			respond := Rand.Intn(3)
+			if respond == 0 {
+				responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
+				_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
+				if err != nil {
+					fmt.Println("Error sending response " + err.Error())
 				}
 			}
 		}
