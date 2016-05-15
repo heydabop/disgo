@@ -1722,10 +1722,10 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 func botuptime(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	uptime := time.Since(startTime)
 	days := "days"
-	if int(uptime.Hours()/24) == 1 {
+	if math.Floor(uptime.Hours()/24) == 1 {
 		days = "day"
 	}
-	return fmt.Sprintf("%.f %s %02d:%02d", uptime.Hours()/24, days, uint64(math.Floor(uptime.Hours()))%24, uint64(math.Floor(uptime.Minutes()))%60), nil
+	return fmt.Sprintf("%.f %s %02d:%02d", math.Floor(uptime.Hours()/24), days, uint64(math.Floor(uptime.Hours()))%24, uint64(math.Floor(uptime.Minutes()))%60), nil
 }
 
 func nest(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
