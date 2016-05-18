@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"encoding/json"
@@ -2002,13 +2003,19 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			return
 		}
 
-		if typingTimer, valid := typingTimer[m.Author.ID]; valid {
+		/*if typingTimer, valid := typingTimer[m.Author.ID]; valid {
 			typingTimer.Stop()
-		}
+		}*/
 
 		/*if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
+		if m.ChannelID == minecraftChanID {
+			err := exec.Command("/home/ross/bin/mcrcon", "-c", "-s", "-H", "127.0.0.1", "-P", "20200", "-p", "jai3Thiu4e", fmt.Sprintf("say %s> %s", m.Author.Username, m.Content)).Start()
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}
 		if match := meanRegex.FindString(m.Content); match != "" {
 			respond := Rand.Intn(3)
 			if respond == 0 {
@@ -2163,6 +2170,78 @@ func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 	}
 }
 
+func tailMinecraftLog(session *discordgo.Session) {
+	logTail := exec.Command("tail", "-F", "-n", "0", minecraftLogPath)
+	logOut, err := logTail.StdoutPipe()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	if err := logTail.Start(); err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	bufLogOut := bufio.NewScanner(logOut)
+	logChan := make(chan string)
+	go minecraftToDiscord(session, logChan)
+	for bufLogOut.Scan() {
+		logChan <- bufLogOut.Text()
+	}
+	if err := bufLogOut.Err(); err != nil {
+		fmt.Println(err.Error())
+	}
+}
+
+func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
+	joinedRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+) joined the game$`)
+	leftRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+) left the game$`)
+	chatRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: <(\w+)> (.*)$`)
+	serverChatRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: \[Server\] (.*)$`)
+	achievementRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+ has just earned the achievement \[.*?\])$`)
+	//deathRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+) (?:was|walked|drowned|experienced|blew|hit|fell|went|walked|tried|got|starved|suffocated|withered)`)
+	usernames := make(map[string]bool)
+
+	for {
+		select {
+		case logLine := <-logChan:
+			if match := chatRegex.FindStringSubmatch(logLine); match != nil {
+				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("%s> %s", match[1], match[2]))
+				break
+			}
+			if match := joinedRegex.FindStringSubmatch(logLine); match != nil {
+				usernames[match[1]] = true
+				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s has joined*", match[1]))
+				break
+			}
+			if match := leftRegex.FindStringSubmatch(logLine); match != nil {
+				usernames[match[1]] = false
+				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s has left*", match[1]))
+				break
+			}
+			if match := serverChatRegex.FindStringSubmatch(logLine); match != nil {
+				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("[Server] %s", match[1]))
+				break
+			}
+			if match := achievementRegex.FindStringSubmatch(logLine); match != nil {
+				session.ChannelMessageSend(minecraftChanID, match[1])
+				break
+			}
+			var otherRegexes []*regexp.Regexp
+			for username, online := range usernames {
+				if online {
+					otherRegexes = append(otherRegexes, regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (`+username+` .*)$`))
+				}
+			}
+			for _, regex := range otherRegexes {
+				if match := regex.FindStringSubmatch(logLine); match != nil {
+					session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s*", match[1]))
+					break
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -2287,6 +2366,10 @@ func main() {
 		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
 	}
 	rows.Close()
+
+	if len(minecraftChanID) > 0 {
+		tailMinecraftLog(client)
+	}
 
 	var input string
 	fmt.Scanln(&input)
