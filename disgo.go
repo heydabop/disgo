@@ -2229,7 +2229,7 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 			var otherRegexes []*regexp.Regexp
 			for username, online := range usernames {
 				if online {
-					otherRegexes = append(otherRegexes, regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (`+username+` .*)$`))
+					otherRegexes = append(otherRegexes, regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (`+username+` (?!lost connection).*)$`))
 				}
 			}
 			for _, regex := range otherRegexes {
