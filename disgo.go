@@ -2011,7 +2011,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
 		if m.ChannelID == minecraftChanID {
-			err := exec.Command("/home/ross/bin/mcrcon", "-c", "-s", "-H", "127.0.0.1", "-P", "20200", "-p", "jai3Thiu4e", fmt.Sprintf("say %s> %s", m.Author.Username, m.Content)).Start()
+			username := m.Author.Username
+			if len(username) > 16 {
+				username = fmt.Sprintf("%s…", m.Author.Username[:16])
+			}
+			err := exec.Command("/home/ross/bin/mcrcon", "-c", "-s", "-H", "127.0.0.1", "-P", "20200", "-p", "jai3Thiu4e", fmt.Sprintf("say %s> %s", username, m.Content)).Start()
 			if err != nil {
 				fmt.Println(err.Error())
 			}
@@ -2229,11 +2233,20 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 			var otherRegexes []*regexp.Regexp
 			for username, online := range usernames {
 				if online {
-					otherRegexes = append(otherRegexes, regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (`+username+` .*)$`))
+					regex, err := regexp.Compile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: ((` + username + `) .*)$`)
+					if err != nil {
+						fmt.Println(err.Error())
+						return
+					}
+					otherRegexes = append(otherRegexes, regex)
 				}
 			}
 			for _, regex := range otherRegexes {
 				if match := regex.FindStringSubmatch(logLine); match != nil {
+					lostConnectionRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: ` + match[2] + ` lost connection`)
+					if lostConnectionRegex.MatchString(logLine) {
+						return
+					}
 					session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s*", match[1]))
 					break
 				}
