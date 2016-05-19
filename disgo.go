@@ -2236,7 +2236,7 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 					regex, err := regexp.Compile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: ((` + username + `) .*)$`)
 					if err != nil {
 						fmt.Println(err.Error())
-						return
+						break
 					}
 					otherRegexes = append(otherRegexes, regex)
 				}
@@ -2245,7 +2245,7 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 				if match := regex.FindStringSubmatch(logLine); match != nil {
 					lostConnectionRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: ` + match[2] + ` lost connection`)
 					if lostConnectionRegex.MatchString(logLine) {
-						return
+						break
 					}
 					session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s*", match[1]))
 					break
