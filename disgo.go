@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -1181,7 +1182,7 @@ func oddshot(session *discordgo.Session, chanID, authorID, messageID string, arg
 func remindme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	arg := strings.Join(args, " ")
 	fmt.Println(arg)
-	atTimeRegex := regexp.MustCompile(`(?i)(?:at\s+)?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[\+-]\d{4})\s+(?:to)?\s+(.*)`)
+	atTimeRegex := regexp.MustCompile(`(?i)(?:at\s+)?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[\+-]\d{4})\s+(?:to\s+)?(.*)`)
 	inTimeRegex := regexp.MustCompile(`(?i)(?:in)?\s*(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))\s?)+(?:to)?\s+(.*)`)
 	atMatch := atTimeRegex.FindStringSubmatch(arg)
 	inMatch := inTimeRegex.FindStringSubmatch(arg)
@@ -1811,6 +1812,35 @@ func nest(session *discordgo.Session, chanID, authorID, messageID string, args [
 		nil
 }
 
+func minecraft(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	guild, err := session.State.Guild(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	if guild.ID != minecraftGuildID {
+		return "", nil
+	}
+	output, err := exec.Command("/home/ross/bin/mcrcon", "-c", "-H", "127.0.0.1", "-P", mcrconPort, "-p", mcrconPass, "list").Output()
+	if err != nil {
+		if exiterr, ok := err.(*exec.ExitError); ok {
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				if status.ExitStatus() != 1 {
+					return "", err
+				}
+			} else {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+	return fmt.Sprintf("%s:%d\n%s", minecraftServer, minecraftPort, output), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -1925,6 +1955,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"activity":       Command(activity),
 		"botuptime":      Command(botuptime),
 		"nest":           Command(nest),
+		"minecraft":      Command(minecraft),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -2015,7 +2046,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			if len(username) > 16 {
 				username = fmt.Sprintf("%s…", m.Author.Username[:16])
 			}
-			err := exec.Command("/home/ross/bin/mcrcon", "-c", "-s", "-H", "127.0.0.1", "-P", "20200", "-p", "jai3Thiu4e", fmt.Sprintf("say %s> %s", username, m.Content)).Start()
+			err := exec.Command("/home/ross/bin/mcrcon", "-c", "-s", "-H", "127.0.0.1", "-P", mcrconPort, "-p", mcrconPass, fmt.Sprintf("say %s> %s", username, m.Content)).Start()
 			if err != nil {
 				fmt.Println(err.Error())
 			}
