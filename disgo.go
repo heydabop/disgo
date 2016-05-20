@@ -11,6 +11,7 @@ import (
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
+	"github.com/james4k/rcon"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -30,7 +31,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -1824,19 +1824,20 @@ func minecraft(session *discordgo.Session, chanID, authorID, messageID string, a
 	if guild.ID != minecraftGuildID {
 		return "", nil
 	}
-	output, err := exec.Command("/home/ross/bin/mcrcon", "-c", "-H", "127.0.0.1", "-P", mcrconPort, "-p", mcrconPass, "list").Output()
+	conn, err := rcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
 	if err != nil {
-		if exiterr, ok := err.(*exec.ExitError); ok {
-			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-				if status.ExitStatus() != 1 {
-					return "", err
-				}
-			} else {
-				return "", err
-			}
-		} else {
-			return "", err
-		}
+		return "", err
+	}
+	wID, err := conn.Write("list")
+	if err != nil {
+		return "", err
+	}
+	output, rID, err := conn.Read()
+	if err != nil {
+		return "", err
+	}
+	if rID != wID {
+		return "", errors.New("Mismatched request code")
 	}
 	return fmt.Sprintf("%s:%d\n%s", minecraftServer, minecraftPort, output), nil
 }
@@ -2046,8 +2047,15 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			if len(username) > 16 {
 				username = fmt.Sprintf("%s…", m.Author.Username[:16])
 			}
-			err := exec.Command("/home/ross/bin/mcrcon", "-c", "-s", "-H", "127.0.0.1", "-P", mcrconPort, "-p", mcrconPass, fmt.Sprintf("say %s> %s", username, m.Content)).Start()
-			if err != nil {
+			conn, err := rcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
+			if err == nil {
+				_, err := conn.Write(fmt.Sprintf("say %s> %s", username, m.Content))
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("`ERROR BRIDGING MESSAGE: %s", err.Error()))
+					fmt.Println(err.Error())
+				}
+			} else {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("`ERROR BRIDGING MESSAGE: %s", err.Error()))
 				fmt.Println(err.Error())
 			}
 		}
