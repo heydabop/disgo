@@ -2294,6 +2294,16 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 	}
 }
 
+func normalizeKarma() {
+	_, err := sqlClient.Exec("UPDATE UserKarma SET Karma = MAX(Karma / 3, 0)")
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	now := time.Now()
+	nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
+	time.AfterFunc(nextRun.Sub(now), normalizeKarma)
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -2422,6 +2432,9 @@ func main() {
 	if len(minecraftChanID) > 0 {
 		tailMinecraftLog(client)
 	}
+
+	nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
+	time.AfterFunc(nextRun.Sub(now), normalizeKarma)
 
 	var input string
 	fmt.Scanln(&input)
