@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/Craftserve/mcstatus"
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
@@ -21,6 +22,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -1824,22 +1826,15 @@ func minecraft(session *discordgo.Session, chanID, authorID, messageID string, a
 	if guild.ID != minecraftGuildID {
 		return "", nil
 	}
-	conn, err := rcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
+	server, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("127.0.0.1:25565"))
 	if err != nil {
 		return "", err
 	}
-	wID, err := conn.Write("list")
+	status, _, err := mcstatus.CheckStatus(server)
 	if err != nil {
 		return "", err
 	}
-	output, rID, err := conn.Read()
-	if err != nil {
-		return "", err
-	}
-	if rID != wID {
-		return "", errors.New("Mismatched request code")
-	}
-	return fmt.Sprintf("%s:%d\n%s", minecraftServer, minecraftPort, output), nil
+	return fmt.Sprintf("%s:%d\n[%d/%d] Online: %s", minecraftServer, minecraftPort, status.Players, status.Slots, strings.Join(status.PlayersSample, ", ")), nil
 }
 
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2043,9 +2038,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
 		if m.ChannelID == minecraftChanID {
-			username := m.Author.Username
-			if len(username) > 16 {
-				username = fmt.Sprintf("%s…", m.Author.Username[:16])
+			username, found := minecraftUsernameMap[m.Author.ID]
+			if !found {
+				if len(m.Author.Username) > 16 {
+					username = fmt.Sprintf("%s…", m.Author.Username[:16])
+				} else {
+					username = m.Author.Username
+				}
 			}
 			conn, err := rcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
 			if err == nil {
@@ -2152,6 +2151,7 @@ func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-c
 					res, err := http.PostForm("http://textbelt.com/text", url.Values{"number": {phoneNumber}, "message": {"Kicked from " + userGuilds[guildID].Name}})
 					if err != nil {
 						fmt.Println("Error sending SMS", err.Error())
+						continue
 					}
 					defer res.Body.Close()
 					if res.StatusCode != 200 {
