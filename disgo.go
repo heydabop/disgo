@@ -972,7 +972,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(29)
+		suh := Rand.Intn(30)
 		if err != nil {
 			return "", err
 		}
@@ -2213,6 +2213,32 @@ func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 	}
 }
 
+func handleGuildMemberAdd(s *discordgo.Session, m *discordgo.GuildMemberAdd) {
+	guild, err := s.Guild(m.GuildID)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	for _, channel := range guild.Channels {
+		if channel.ID != minecraftChanID {
+			s.ChannelMessageSend(channel.ID, fmt.Sprintf("*%s has joined*", m.User.Username))
+		}
+	}
+}
+
+func handleGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMemberRemove) {
+	guild, err := s.Guild(m.GuildID)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	for _, channel := range guild.Channels {
+		if channel.ID != minecraftChanID {
+			s.ChannelMessageSend(channel.ID, fmt.Sprintf("*%s has left*", m.User.Username))
+		}
+	}
+}
+
 func tailMinecraftLog(session *discordgo.Session) {
 	logTail := exec.Command("tail", "-F", "-n", "0", minecraftLogPath)
 	logOut, err := logTail.StdoutPipe()
@@ -2330,6 +2356,8 @@ func main() {
 	client.AddHandler(handlePresenceUpdate)
 	//client.AddHandler(handleTypingStart)
 	client.AddHandler(handleVoiceUpdate)
+	client.AddHandler(handleGuildMemberAdd)
+	client.AddHandler(handleGuildMemberRemove)
 	client.Open()
 	defer client.Close()
 	defer client.Logout()
