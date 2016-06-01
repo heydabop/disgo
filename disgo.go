@@ -1733,7 +1733,7 @@ func botuptime(session *discordgo.Session, chanID, authorID, messageID string, a
 }
 
 func nest(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	req, err := http.NewRequest("GET", nestTransportUrl+"/v2/mobile/"+nestUser, nil)
+	req, err := http.NewRequest("GET", nestTransportURL+"/v2/mobile/"+nestUser, nil)
 	if err != nil {
 		return "", err
 	}
@@ -1770,7 +1770,7 @@ func nest(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "", errors.New("No structure with ID")
 	}
 
-	weatherResp, err := http.Get(nestWeatherUrl + device.PostalCode)
+	weatherResp, err := http.Get(nestWeatherURL + device.PostalCode)
 	if err != nil {
 		return "", err
 	}
@@ -1957,16 +1957,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
-			if command[0] != "upvote" &&
-				command[0] != "downvote" &&
-				command[0] != "help" &&
-				command[0] != "commands" &&
-				command[0] != "rename" &&
-				command[0] != "delete" &&
-				command[0] != "asuh" &&
-				command[0] != "uq" &&
-				command[0] != "upquote" &&
-				command[0] != "reminders" {
+			switch command[0] {
+			case "upvote", "downvote", "help", "commands", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet":
+			default:
 				s.ChannelTyping(m.ChannelID)
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, m.ID, command[1:])
