@@ -133,7 +133,7 @@ type RandomResult struct {
 }
 type RandomResponse struct {
 	Result RandomResult `json:"result"`
-	Id     int          `json:"id"`
+	ID     int          `json:"id"`
 }
 
 type UserBet struct {
@@ -1920,7 +1920,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", nil
 	}
-	if strconv.Itoa(result.Id) != messageID {
+	if strconv.Itoa(result.ID) != messageID {
 		return "", errors.New("ID mismatch")
 	}
 	value := rouletteWheelValues[result.Result.Random.Data[0]]
