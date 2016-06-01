@@ -2121,7 +2121,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
-	oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
+	//oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
 	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
@@ -2311,10 +2311,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			executeCommand(s, m, []string{"twitch", match[2]})
 			return
 		}
-		if match := oddshotRegex.FindString(m.Content); match != "" {
+		/*if match := oddshotRegex.FindString(m.Content); match != "" {
 			executeCommand(s, m, []string{"oddshot", match})
 			return
-		}
+		}*/
 		for _, regex := range regexes {
 			if match := regex.FindStringSubmatch(m.Content); match != nil {
 				executeCommand(s, m, strings.Fields(match[1]))
