@@ -151,7 +151,7 @@ var (
 	lastQuoteIDs                    = make(map[string]int64)
 	ownUserID                       string
 	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
-	rouletteGuildId                 = ""
+	rouletteGuildID                 = ""
 	rouletteIsRed                   = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
 	rouletteBets                    []UserBet
 	rouletteTableValues             = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
@@ -298,7 +298,7 @@ func getBetSpaces(args []string, req int) ([]int, error) {
 			return spaces, err
 		}
 		if space > 36 || space < 0 {
-			return spaces, errors.New(fmt.Sprintf("Space %d isn't on board", space))
+			return spaces, fmt.Errorf("Space %d isn't on board", space)
 		}
 		spaces[i] = space
 	}
@@ -311,10 +311,10 @@ func getBetDetails(args []string, req int) (float64, []int, error) {
 		return -1, []int{}, err
 	}
 	if len(args[1:]) < req {
-		return -1, []int{}, errors.New("Missing spaces(s) in bet")
+		return -1, []int{}, fmt.Errorf("Missing spaces(s) in bet; %d given, %d needed", len(args[1:]), req)
 	}
 	if len(args[1:]) > req {
-		return -1, []int{}, errors.New(fmt.Sprintf("Too many spaces for bet type; %d given, %d needed", len(args[1:]), req))
+		return -1, []int{}, fmt.Errorf("Too many spaces for bet type; %d given, %d needed", len(args[1:]), req)
 	}
 	spaces, err := getBetSpaces(args[1:], req)
 	if err != nil {
@@ -322,7 +322,6 @@ func getBetDetails(args []string, req int) (float64, []int, error) {
 	}
 	return bet, spaces, nil
 }
-
 
 func spam(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	if len(args) < 1 {
@@ -1949,7 +1948,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 		rouletteBets = make([]UserBet, 0)
 		rouletteWheelSpinning = false
 	})
-	rouletteGuildId = guild.ID
+	rouletteGuildID = guild.ID
 	rouletteWheelSpinning = true
 	return "Spinning...", nil
 }
@@ -1978,7 +1977,7 @@ Corner - corner <number> <number> <number> <number> - on one of 4 given adjacent
 Six Line - six <number> <number> - on one of 6 numbers from adjacent rows in which the 2 given numbers lie - /bet 1.5 six 13 16
 Trio - trio <number> - on 0 or given number (1, 2, or 3) - /bet 1.2 trio 2
 Basket - basket - on 0, 1, 2, or 3`+"```"+`
-Outside
+Outside *COMING SOON*
 `+"```"+`Low - low - on 1-18
 High - high - on 19-36
 Red - red - on red
@@ -1996,7 +1995,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 	if !rouletteWheelSpinning {
 		return "The wheel must be spinning to place a bet. Try /roulette", nil
 	}
-	if guild.ID != rouletteGuildId { //TODO: dont be lazy and allow multiple wheels
+	if guild.ID != rouletteGuildID { //TODO: dont be lazy and allow multiple wheels
 		return "", errors.New("Sorry, the wheel is spinning in another server...")
 	}
 	switch strings.ToLower(args[0]) {
@@ -2017,7 +2016,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if (spaces[0] != spaces[1]) && (((spaces[0]-1)/3 == (spaces[1]-1)/3 && int(math.Abs(float64(spaces[1]-spaces[0]))) == 1) || int(math.Abs(float64(spaces[1]-spaces[0]))) == 3 || ((spaces[0] == 0 || spaces[1] == 0) && int(math.Abs(float64(spaces[1]-spaces[0]))) <= 3)) {
 			rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 17, bet})
 		} else {
-			return "", errors.New(fmt.Sprintf("Spaces %v aren't adjacent", spaces))
+			return "", fmt.Errorf("Spaces %v aren't adjacent", spaces)
 		}
 	case "street":
 		bet, spaces, err := getBetDetails(args[1:], 1)
@@ -2049,10 +2048,49 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				return "", errors.New("Can't corner bet on 0")
 			}
 		}
-		if spaces[1] - spaces[0] != 1 || spaces[3] - spaces[2] != 1 || spaces[0] / 3 != spaces[1] / 3 || spaces[2] / 3 != spaces[3] / 3 || (spaces[2] / 3) - (spaces[0] / 3) != 1 || (spaces[3] / 3) - (spaces[1] / 3) != 1 {
+		if spaces[1]-spaces[0] != 1 || spaces[3]-spaces[2] != 1 || (spaces[0]-1)/3 != (spaces[1]-1)/3 || (spaces[2]-1)/3 != (spaces[3]-1)/3 || ((spaces[2]-1)/3)-((spaces[0]-1)/3) != 1 || ((spaces[3]-1)/3)-((spaces[1]-1)/3) != 1 {
 			return "", errors.New("Spaces %v aren't all adjacent. Note that spaces should be entered in ascending order. 16 17 19 20 isn't treated the same as 19 20 16 17")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 8, bet})
+	case "six":
+		bet, spaces, err := getBetDetails(args[1:], 2)
+		if err != nil {
+			return "", err
+		}
+		if spaces[0] == 0 || spaces[1] == 0 {
+			return "", errors.New("Can't six line bet on 0")
+		}
+		if int(math.Abs(float64(((spaces[0]-1)/3)-((spaces[1]-1)/3)))) != 1 {
+			return "", fmt.Errorf("%d and %d aren't in adjacent rows", spaces[0], spaces[1])
+		}
+		betSpaces := make([]int, 0, 6)
+		for _, space := range spaces {
+			for _, row := range rouletteTableValues {
+				for _, tableSpace := range row {
+					if tableSpace == space {
+						betSpaces = append(betSpaces, row...)
+					}
+				}
+			}
+		}
+		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 5, bet})
+	case "trio":
+		bet, spaces, err := getBetDetails(args[1:], 1)
+		if err != nil {
+			return "", err
+		}
+		if spaces[0] != 1 && spaces[0] != 2 && spaces[0] != 3 {
+			return "", errors.New("Trio bet is only valid on 1, 2, or 3")
+		}
+		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
+	case "basket":
+		bet, _, err := getBetDetails(args[1:], 0)
+		if err != nil {
+			return "", err
+		}
+		rouletteBets = append(rouletteBets, UserBet{authorID, []int{0, 1, 2, 3}, 11, bet})
+	default:
+		return "", errors.New("Unrecognized bet type")
 	}
 	return "", nil
 }
