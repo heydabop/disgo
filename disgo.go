@@ -93,38 +93,6 @@ func (u UserMessageLengths) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
 }
 
-type NestCurrentWeather struct {
-	TempF     float64 `json:"temp_f"`
-	Condition string  `json:"condition"`
-	Humidity  int     `json:"humidity"`
-}
-type NestWeather struct {
-	Current NestCurrentWeather `json:"current"`
-}
-type NestWeatherResponse map[string]NestWeather
-
-type NestStructure struct {
-	Away bool `json:"away"`
-}
-type NestDevice struct {
-	AwayTemperatureHigh float64 `json:"away_temperature_high"`
-	AwayTemperatureLow  float64 `json:"away_temperature_low"`
-	CurrentHumidity     int     `json:"current_humidity"`
-	PostalCode          string  `json:"postal_code"`
-	TimeToTarget        int64   `json:"time_to_target"`
-}
-type NestShared struct {
-	AutoAway              int     `json:"auto_away"`
-	CurrentTemperatrue    float64 `json:"current_temperature"`
-	TargetTemperature     float64 `json:"target_temperature"`
-	TargetTemperatureType string  `json:"target_temperature_type"`
-}
-type NestResponse struct {
-	Device    map[string]NestDevice    `json:"device"`
-	Shared    map[string]NestShared    `json:"shared"`
-	Structure map[string]NestStructure `json:"structure"`
-}
-
 var (
 	currentVoiceSession             *discordgo.VoiceConnection
 	currentVoiceTimer               *time.Timer
@@ -1733,85 +1701,14 @@ func botuptime(session *discordgo.Session, chanID, authorID, messageID string, a
 }
 
 func nest(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	req, err := http.NewRequest("GET", nestTransportURL+"/v2/mobile/"+nestUser, nil)
+	dateStr := time.Now().Format("20060102")
+	cmd := exec.Command("/home/ross/.gocode/src/github.com/heydabop/nesttracking/nestgraph/nestgraph", dateStr)
+	cmd.Dir = "/home/ross/.gocode/src/github.com/heydabop/nesttracking/nestgraph/"
+	err := cmd.Run()
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Authorization", "Basic "+nestToken)
-	req.Header.Add("X-nl-user-id", nestUser)
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var nestResp NestResponse
-	err = json.Unmarshal(body, &nestResp)
-	if err != nil {
-		return "", err
-	}
-	device, found := nestResp.Device[nestSerial]
-	if !found {
-		return "", errors.New("No device with serial")
-	}
-	shared, found := nestResp.Shared[nestSerial]
-	if !found {
-		return "", errors.New("No shared with serial")
-	}
-	structure, found := nestResp.Structure[nestStructureID]
-	if !found {
-		return "", errors.New("No structure with ID")
-	}
-
-	weatherResp, err := http.Get(nestWeatherURL + device.PostalCode)
-	if err != nil {
-		return "", err
-	}
-	defer weatherResp.Body.Close()
-	body, err = ioutil.ReadAll(weatherResp.Body)
-	if err != nil {
-		return "", err
-	}
-	var nestWeather NestWeatherResponse
-	err = json.Unmarshal(body, &nestWeather)
-	if err != nil {
-		return "", err
-	}
-	weather, found := nestWeather[device.PostalCode]
-	if !found {
-		return "", errors.New("Unable to find weather for postal code")
-	}
-	homeStr := "Home"
-	if shared.AutoAway == 2 {
-		homeStr = "Auto-Away"
-	} else if structure.Away {
-		homeStr = "Away"
-	}
-	targetStr := fmt.Sprintf("%s target: %.1f °F", shared.TargetTemperatureType, shared.TargetTemperature*1.8+32)
-	if structure.Away {
-		targetStr = fmt.Sprintf("target: %.1f-%.1f °F", device.AwayTemperatureLow*1.8+32, device.AwayTemperatureHigh*1.8+32)
-	}
-	if device.TimeToTarget > 0 {
-		targetTime := time.Unix(device.TimeToTarget, 0)
-		minutes := targetTime.Sub(time.Now()).Minutes()
-		targetStr += fmt.Sprintf(" in %.f minutes", minutes)
-	}
-	return fmt.Sprintf("Inside (%s): %.1f °F (%s); %d%% humidity\nOutside: %.1f °F; %d%% humidity; %s",
-			homeStr,
-			shared.CurrentTemperatrue*1.8+32,
-			targetStr,
-			device.CurrentHumidity,
-			weather.Current.TempF,
-			weather.Current.Humidity,
-			weather.Current.Condition),
-		nil
+	return fmt.Sprintf("%s/%s.png", nestlogRoot, dateStr), nil
 }
 
 func minecraft(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
