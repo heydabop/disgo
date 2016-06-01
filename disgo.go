@@ -41,23 +41,22 @@ type KarmaDto struct {
 	UserID string
 	Karma  int64
 }
-type TwitchChannel struct {
-	DisplayName string `json:"display_name"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
+
+type TwitchStreamReply struct {
+	Stream *struct {
+		ID         int     `json:"_id"`
+		AverageFps float64 `json:"average_fps"`
+		Game       string  `json:"game"`
+		Viewers    int     `json:"viewers"`
+		Channel    struct {
+			DisplayName string `json:"display_name"`
+			Name        string `json:"name"`
+			Status      string `json:"status"`
+		} `json:"channel"`
+		VideoHeight int `json:"video_height"`
+	} `json:"stream"`
 }
 
-type TwitchStream struct {
-	ID          int           `json:"_id"`
-	AverageFps  float64       `json:"average_fps"`
-	Game        string        `json:"game"`
-	Viewers     int           `json:"viewers"`
-	Channel     TwitchChannel `json:"channel"`
-	VideoHeight int           `json:"video_height"`
-}
-type TwitchStreamReply struct {
-	Stream *TwitchStream `json:"stream"`
-}
 type UserMessageCount struct {
 	AuthorID    string
 	NumMessages int64
@@ -67,18 +66,16 @@ type UserMessageLength struct {
 	AvgLength float64
 }
 
-type WolframPlaintextPod struct {
-	Title     string `xml:"title,attr"`
-	Error     bool   `xml:"error,attr"`
-	Primary   *bool  `xml:"primary,attr"`
-	Plaintext string `xml:"subpod>plaintext"`
-}
-
 type WolframQueryResult struct {
-	Success bool                  `xml:"success,attr"`
-	Error   bool                  `xml:"error,attr"`
-	NumPods int                   `xml:"numpods,attr"`
-	Pods    []WolframPlaintextPod `xml:"pod"`
+	Success bool `xml:"success,attr"`
+	Error   bool `xml:"error,attr"`
+	NumPods int  `xml:"numpods,attr"`
+	Pods    []struct {
+		Title     string `xml:"title,attr"`
+		Error     bool   `xml:"error,attr"`
+		Primary   *bool  `xml:"primary,attr"`
+		Plaintext string `xml:"subpod>plaintext"`
+	} `xml:"pod"`
 }
 
 type UserMessageLengths []UserMessageLength
@@ -91,6 +88,15 @@ func (u UserMessageLengths) Less(i, j int) bool {
 }
 func (u UserMessageLengths) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
+}
+
+type SteamAppList struct {
+	Applist struct {
+		Apps []struct {
+			Appid int    `json:"appid"`
+			Name  string `json:"name"`
+		} `json:"apps"`
+	} `json:"applist"`
 }
 
 var (
@@ -1994,11 +2000,28 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 	currentGame := ""
-	games := []string{"Skynet Simulator 2020", "Kill All Humans", "WW III: The Game", "9GAG Meme Generator", "Subreddit Simulator",
-		"Runescape", "War Games", "Half Life 3", "Secret of the Magic Crystals", "Dransik", "<Procedurally Generated Name>",
-		"Call of Duty 3", "Dino D-Day", "Overwatch", "Euro Truck Simulator 2", "Farmville", "Dwarf Fortress",
-		"Pajama Sam: No Need to Hide When It's Dark Outside", "League of Legends", "The Ship", "Sleepy Doge", "Surgeon Simulator",
-		"Farming Simulator 2018: The Farming"}
+	res, err := http.Get(fmt.Sprintf("http://api.steampowered.com/ISteamApps/GetAppList/v2"))
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	if res.StatusCode != 200 {
+		fmt.Println(res.Status)
+		return
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	res.Body.Close()
+	var applist SteamAppList
+	err = json.Unmarshal(body, &applist)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
 	for {
 		select {
 		case <-ticker:
@@ -2009,11 +2032,11 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 				}
 				currentGame = ""
 			} else {
-				index := Rand.Intn(len(games) * 5)
-				if index >= len(games) {
+				index := Rand.Intn(len(applist.Applist.Apps) * 5)
+				if index >= len(applist.Applist.Apps) {
 					currentGame = ""
 				} else {
-					currentGame = games[index]
+					currentGame = applist.Applist.Apps[index].Name
 				}
 			}
 			err := s.UpdateStatus(0, currentGame)
