@@ -2386,7 +2386,7 @@ func main() {
 	rows.Close()
 
 	if len(minecraftChanID) > 0 {
-		tailMinecraftLog(client)
+		go tailMinecraftLog(client)
 	}
 
 	nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
