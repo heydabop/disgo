@@ -2039,9 +2039,17 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 					currentGame = applist.Applist.Apps[index].Name
 				}
 			}
+			now := time.Now()
 			err := s.UpdateStatus(0, currentGame)
 			if err != nil {
 				fmt.Println("ERROR updating game: ", err.Error())
+			}
+			for _, guild := range userGuilds {
+				_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "online", currentGame)
+				if err != nil {
+					fmt.Println("ERROR inserting self into UserPresence DB")
+					fmt.Println(err.Error())
+				}
 			}
 		}
 	}
@@ -2340,6 +2348,10 @@ func main() {
 			}
 			client.Logout()
 			client.Close()
+			now := time.Now()
+			for _, guild := range userGuilds {
+				sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "offline", "")
+			}
 			os.Exit(0)
 		}
 	}()
