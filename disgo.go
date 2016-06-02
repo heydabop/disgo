@@ -2095,6 +2095,9 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	if p.User == nil {
 		return
 	}
+	if p.User.ID == ownUserID { //doesnt happen now, might later, prevent double insertions
+		return
+	}
 	gameName := ""
 	if p.Game != nil {
 		gameName = p.Game.Name
