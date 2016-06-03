@@ -41,23 +41,22 @@ type KarmaDto struct {
 	UserID string
 	Karma  int64
 }
-type TwitchChannel struct {
-	DisplayName string `json:"display_name"`
-	Name        string `json:"name"`
-	Status      string `json:"status"`
+
+type TwitchStreamReply struct {
+	Stream *struct {
+		ID         int     `json:"_id"`
+		AverageFps float64 `json:"average_fps"`
+		Game       string  `json:"game"`
+		Viewers    int     `json:"viewers"`
+		Channel    struct {
+			DisplayName string `json:"display_name"`
+			Name        string `json:"name"`
+			Status      string `json:"status"`
+		} `json:"channel"`
+		VideoHeight int `json:"video_height"`
+	} `json:"stream"`
 }
 
-type TwitchStream struct {
-	ID          int           `json:"_id"`
-	AverageFps  float64       `json:"average_fps"`
-	Game        string        `json:"game"`
-	Viewers     int           `json:"viewers"`
-	Channel     TwitchChannel `json:"channel"`
-	VideoHeight int           `json:"video_height"`
-}
-type TwitchStreamReply struct {
-	Stream *TwitchStream `json:"stream"`
-}
 type UserMessageCount struct {
 	AuthorID    string
 	NumMessages int64
@@ -67,18 +66,16 @@ type UserMessageLength struct {
 	AvgLength float64
 }
 
-type WolframPlaintextPod struct {
-	Title     string `xml:"title,attr"`
-	Error     bool   `xml:"error,attr"`
-	Primary   *bool  `xml:"primary,attr"`
-	Plaintext string `xml:"subpod>plaintext"`
-}
-
 type WolframQueryResult struct {
-	Success bool                  `xml:"success,attr"`
-	Error   bool                  `xml:"error,attr"`
-	NumPods int                   `xml:"numpods,attr"`
-	Pods    []WolframPlaintextPod `xml:"pod"`
+	Success bool `xml:"success,attr"`
+	Error   bool `xml:"error,attr"`
+	NumPods int  `xml:"numpods,attr"`
+	Pods    []struct {
+		Title     string `xml:"title,attr"`
+		Error     bool   `xml:"error,attr"`
+		Primary   *bool  `xml:"primary,attr"`
+		Plaintext string `xml:"subpod>plaintext"`
+	} `xml:"pod"`
 }
 
 type UserMessageLengths []UserMessageLength
@@ -93,36 +90,13 @@ func (u UserMessageLengths) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
 }
 
-type NestCurrentWeather struct {
-	TempF     float64 `json:"temp_f"`
-	Condition string  `json:"condition"`
-	Humidity  int     `json:"humidity"`
-}
-type NestWeather struct {
-	Current NestCurrentWeather `json:"current"`
-}
-type NestWeatherResponse map[string]NestWeather
-
-type NestStructure struct {
-	Away bool `json:"away"`
-}
-type NestDevice struct {
-	AwayTemperatureHigh float64 `json:"away_temperature_high"`
-	AwayTemperatureLow  float64 `json:"away_temperature_low"`
-	CurrentHumidity     int     `json:"current_humidity"`
-	PostalCode          string  `json:"postal_code"`
-	TimeToTarget        int64   `json:"time_to_target"`
-}
-type NestShared struct {
-	AutoAway              int     `json:"auto_away"`
-	CurrentTemperatrue    float64 `json:"current_temperature"`
-	TargetTemperature     float64 `json:"target_temperature"`
-	TargetTemperatureType string  `json:"target_temperature_type"`
-}
-type NestResponse struct {
-	Device    map[string]NestDevice    `json:"device"`
-	Shared    map[string]NestShared    `json:"shared"`
-	Structure map[string]NestStructure `json:"structure"`
+type SteamAppList struct {
+	Applist struct {
+		Apps []struct {
+			Appid int    `json:"appid"`
+			Name  string `json:"name"`
+		} `json:"apps"`
+	} `json:"applist"`
 }
 
 type RandomRandom struct {
@@ -144,8 +118,10 @@ type UserBet struct {
 }
 
 var (
+	currentGame                     string
 	currentVoiceSession             *discordgo.VoiceConnection
 	currentVoiceTimer               *time.Timer
+	gamelist                        []string
 	lastAuthorID                    string
 	lastMessage, lastCommandMessage discordgo.Message
 	lastQuoteIDs                    = make(map[string]int64)
@@ -1790,85 +1766,14 @@ func botuptime(session *discordgo.Session, chanID, authorID, messageID string, a
 }
 
 func nest(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	req, err := http.NewRequest("GET", nestTransportUrl+"/v2/mobile/"+nestUser, nil)
+	dateStr := time.Now().Format("20060102")
+	cmd := exec.Command("/home/ross/.gocode/src/github.com/heydabop/nesttracking/graph/graph", dateStr)
+	cmd.Dir = "/home/ross/.gocode/src/github.com/heydabop/nesttracking/graph/"
+	err := cmd.Run()
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Authorization", "Basic "+nestToken)
-	req.Header.Add("X-nl-user-id", nestUser)
-	client := &http.Client{}
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var nestResp NestResponse
-	err = json.Unmarshal(body, &nestResp)
-	if err != nil {
-		return "", err
-	}
-	device, found := nestResp.Device[nestSerial]
-	if !found {
-		return "", errors.New("No device with serial")
-	}
-	shared, found := nestResp.Shared[nestSerial]
-	if !found {
-		return "", errors.New("No shared with serial")
-	}
-	structure, found := nestResp.Structure[nestStructureID]
-	if !found {
-		return "", errors.New("No structure with ID")
-	}
-
-	weatherResp, err := http.Get(nestWeatherUrl + device.PostalCode)
-	if err != nil {
-		return "", err
-	}
-	defer weatherResp.Body.Close()
-	body, err = ioutil.ReadAll(weatherResp.Body)
-	if err != nil {
-		return "", err
-	}
-	var nestWeather NestWeatherResponse
-	err = json.Unmarshal(body, &nestWeather)
-	if err != nil {
-		return "", err
-	}
-	weather, found := nestWeather[device.PostalCode]
-	if !found {
-		return "", errors.New("Unable to find weather for postal code")
-	}
-	homeStr := "Home"
-	if shared.AutoAway == 2 {
-		homeStr = "Auto-Away"
-	} else if structure.Away {
-		homeStr = "Away"
-	}
-	targetStr := fmt.Sprintf("%s target: %.1f °F", shared.TargetTemperatureType, shared.TargetTemperature*1.8+32)
-	if structure.Away {
-		targetStr = fmt.Sprintf("target: %.1f-%.1f °F", device.AwayTemperatureLow*1.8+32, device.AwayTemperatureHigh*1.8+32)
-	}
-	if device.TimeToTarget > 0 {
-		targetTime := time.Unix(device.TimeToTarget, 0)
-		minutes := targetTime.Sub(time.Now()).Minutes()
-		targetStr += fmt.Sprintf(" in %.f minutes", minutes)
-	}
-	return fmt.Sprintf("Inside (%s): %.1f °F (%s); %d%% humidity\nOutside: %.1f °F; %d%% humidity; %s",
-			homeStr,
-			shared.CurrentTemperatrue*1.8+32,
-			targetStr,
-			device.CurrentHumidity,
-			weather.Current.TempF,
-			weather.Current.Humidity,
-			weather.Current.Condition),
-		nil
+	return fmt.Sprintf("%s/%s.png", nestlogRoot, dateStr), nil
 }
 
 func minecraft(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2217,16 +2122,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
-			if command[0] != "upvote" &&
-				command[0] != "downvote" &&
-				command[0] != "help" &&
-				command[0] != "commands" &&
-				command[0] != "rename" &&
-				command[0] != "delete" &&
-				command[0] != "asuh" &&
-				command[0] != "uq" &&
-				command[0] != "upquote" &&
-				command[0] != "reminders" {
+			switch command[0] {
+			case "upvote", "downvote", "help", "commands", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet":
+			default:
 				s.ChannelTyping(m.ChannelID)
 			}
 			reply, err := cmd(s, m.ChannelID, m.Author.ID, m.ID, command[1:])
@@ -2362,36 +2260,66 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	}
 }
 
-func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
-	currentGame := ""
-	games := []string{"Skynet Simulator 2020", "Kill All Humans", "WW III: The Game", "9GAG Meme Generator", "Subreddit Simulator",
-		"Runescape", "War Games", "Half Life 3", "Secret of the Magic Crystals", "Dransik", "<Procedurally Generated Name>",
-		"Call of Duty 3", "Dino D-Day", "Overwatch", "Euro Truck Simulator 2", "Farmville", "Dwarf Fortress",
-		"Pajama Sam: No Need to Hide When It's Dark Outside", "League of Legends", "The Ship", "Sleepy Doge", "Surgeon Simulator",
-		"Farming Simulator 2018: The Farming"}
-	for {
-		select {
-		case <-ticker:
-			if currentGame != "" {
-				changeGame := Rand.Intn(3)
-				if changeGame != 0 {
-					continue
-				}
-				currentGame = ""
-			} else {
-				index := Rand.Intn(len(games) * 5)
-				if index >= len(games) {
-					currentGame = ""
-				} else {
-					currentGame = games[index]
-				}
-			}
-			err := s.UpdateStatus(0, currentGame)
-			if err != nil {
-				fmt.Println("ERROR updating game: ", err.Error())
-			}
+func initGameUpdater(s *discordgo.Session) {
+	res, err := http.Get(fmt.Sprintf("http://api.steampowered.com/ISteamApps/GetAppList/v2"))
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	if res.StatusCode != 200 {
+		fmt.Println(res.Status)
+		return
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	res.Body.Close()
+	var applist SteamAppList
+	err = json.Unmarshal(body, &applist)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	gamelist = make([]string, len(applist.Applist.Apps))
+	for i, app := range applist.Applist.Apps {
+		gamelist[i] = app.Name
+	}
+
+	go updateGame(s)
+}
+
+func updateGame(s *discordgo.Session) {
+	if currentGame != "" {
+		changeGame := Rand.Intn(3)
+		if changeGame != 0 {
+			time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
+			return
+		}
+		currentGame = ""
+	} else {
+		index := Rand.Intn(len(gamelist) * 5)
+		if index >= len(gamelist) {
+			currentGame = ""
+		} else {
+			currentGame = gamelist[index]
 		}
 	}
+	now := time.Now()
+	err := s.UpdateStatus(0, currentGame)
+	if err != nil {
+		fmt.Println("ERROR updating game: ", err.Error())
+	}
+	for _, guild := range userGuilds {
+		_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "online", currentGame)
+		if err != nil {
+			fmt.Println("ERROR inserting self into UserPresence DB")
+			fmt.Println(err.Error())
+		}
+	}
+	time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
 }
 
 func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-chan time.Time) {
@@ -2432,6 +2360,9 @@ func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-c
 func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	now := time.Now()
 	if p.User == nil {
+		return
+	}
+	if p.User.ID == ownUserID { //doesnt happen now, might later, prevent double insertions
 		return
 	}
 	gameName := ""
@@ -2687,13 +2618,16 @@ func main() {
 			}
 			client.Logout()
 			client.Close()
+			now := time.Now()
+			for _, guild := range userGuilds {
+				sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "offline", "")
+			}
 			os.Exit(0)
 		}
 	}()
 	signal.Notify(signals, os.Interrupt)
 
-	gameTicker := time.NewTicker(817 * time.Second)
-	go gameUpdater(client, gameTicker.C)
+	go initGameUpdater(client)
 
 	kickCheckTicker := time.NewTicker(5 * time.Minute)
 	go kickChecker(client.UserGuilds, kickCheckTicker.C)
@@ -2718,7 +2652,7 @@ func main() {
 	rows.Close()
 
 	if len(minecraftChanID) > 0 {
-		tailMinecraftLog(client)
+		go tailMinecraftLog(client)
 	}
 
 	nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
