@@ -100,8 +100,10 @@ type SteamAppList struct {
 }
 
 var (
+	currentGame                     string
 	currentVoiceSession             *discordgo.VoiceConnection
 	currentVoiceTimer               *time.Timer
+	gamelist                        []string
 	lastAuthorID                    string
 	lastMessage, lastCommandMessage discordgo.Message
 	lastQuoteIDs                    = make(map[string]int64)
@@ -1708,8 +1710,8 @@ func botuptime(session *discordgo.Session, chanID, authorID, messageID string, a
 
 func nest(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	dateStr := time.Now().Format("20060102")
-	cmd := exec.Command("/home/ross/.gocode/src/github.com/heydabop/nesttracking/nestgraph/nestgraph", dateStr)
-	cmd.Dir = "/home/ross/.gocode/src/github.com/heydabop/nesttracking/nestgraph/"
+	cmd := exec.Command("/home/ross/.gocode/src/github.com/heydabop/nesttracking/graph/graph", dateStr)
+	cmd.Dir = "/home/ross/.gocode/src/github.com/heydabop/nesttracking/graph/"
 	err := cmd.Run()
 	if err != nil {
 		return "", err
@@ -1998,8 +2000,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	}
 }
 
-func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
-	currentGame := ""
+func initGameUpdater(s *discordgo.Session) {
 	res, err := http.Get(fmt.Sprintf("http://api.steampowered.com/ISteamApps/GetAppList/v2"))
 	if err != nil {
 		fmt.Println(err.Error())
@@ -2022,37 +2023,43 @@ func gameUpdater(s *discordgo.Session, ticker <-chan time.Time) {
 		return
 	}
 
-	for {
-		select {
-		case <-ticker:
-			if currentGame != "" {
-				changeGame := Rand.Intn(3)
-				if changeGame != 0 {
-					continue
-				}
-				currentGame = ""
-			} else {
-				index := Rand.Intn(len(applist.Applist.Apps) * 5)
-				if index >= len(applist.Applist.Apps) {
-					currentGame = ""
-				} else {
-					currentGame = applist.Applist.Apps[index].Name
-				}
-			}
-			now := time.Now()
-			err := s.UpdateStatus(0, currentGame)
-			if err != nil {
-				fmt.Println("ERROR updating game: ", err.Error())
-			}
-			for _, guild := range userGuilds {
-				_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "online", currentGame)
-				if err != nil {
-					fmt.Println("ERROR inserting self into UserPresence DB")
-					fmt.Println(err.Error())
-				}
-			}
+	gamelist = make([]string, len(applist.Applist.Apps))
+	for i, app := range applist.Applist.Apps {
+		gamelist[i] = app.Name
+	}
+
+	go updateGame(s)
+}
+
+func updateGame(s *discordgo.Session) {
+	if currentGame != "" {
+		changeGame := Rand.Intn(3)
+		if changeGame != 0 {
+			time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
+			return
+		}
+		currentGame = ""
+	} else {
+		index := Rand.Intn(len(gamelist) * 5)
+		if index >= len(gamelist) {
+			currentGame = ""
+		} else {
+			currentGame = gamelist[index]
 		}
 	}
+	now := time.Now()
+	err := s.UpdateStatus(0, currentGame)
+	if err != nil {
+		fmt.Println("ERROR updating game: ", err.Error())
+	}
+	for _, guild := range userGuilds {
+		_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "online", currentGame)
+		if err != nil {
+			fmt.Println("ERROR inserting self into UserPresence DB")
+			fmt.Println(err.Error())
+		}
+	}
+	time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
 }
 
 func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-chan time.Time) {
@@ -2360,8 +2367,7 @@ func main() {
 	}()
 	signal.Notify(signals, os.Interrupt)
 
-	gameTicker := time.NewTicker(817 * time.Second)
-	go gameUpdater(client, gameTicker.C)
+	go initGameUpdater(client)
 
 	kickCheckTicker := time.NewTicker(5 * time.Minute)
 	go kickChecker(client.UserGuilds, kickCheckTicker.C)
