@@ -1833,7 +1833,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if value != 0 && rouletteIsRed[value-1] {
 		colorStr = "Red"
 	}
-	time.AfterFunc(90*time.Second, func() {
+	time.AfterFunc(45*time.Second, func() {
 		if value == 0 {
 			session.ChannelMessageSend(chanID, "Landed on 0")
 			rouletteWheelSpinning = false
@@ -1858,7 +1858,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 				}
 			}
 			if !betWin {
-				_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + bet.UserID + ">"}, (bet.Payout+1)*bet.Bet)
+				_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + ownUserID + ">"}, bet.Bet)
 				if err != nil {
 					session.ChannelMessageSend(chanID, "⚠ `"+err.Error()+"`")
 				}
@@ -1952,9 +1952,9 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 	}
 	var bet float64
 	var spaces []int
-	switch strings.ToLower(args[0]) {
+	switch strings.ToLower(args[1]) {
 	case "single":
-		bet, spaces, err = getBetDetails(args[1:], 1)
+		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 1)
 		if err != nil {
 			return "", err
 		}
@@ -1963,7 +1963,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if len(args) < 3 {
 			return "", errors.New("Missing number(s) in split bet")
 		}
-		bet, spaces, err = getBetDetails(args[1:], 2)
+		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 2)
 		if err != nil {
 			return "", err
 		}
@@ -1973,7 +1973,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 			return "", fmt.Errorf("Spaces %v aren't adjacent", spaces)
 		}
 	case "street":
-		bet, spaces, err = getBetDetails(args[1:], 1)
+		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 1)
 		if err != nil {
 			return "", err
 		}
@@ -1993,7 +1993,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
 	case "corner":
-		bet, spaces, err = getBetDetails(args[1:], 4)
+		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 4)
 		if err != nil {
 			return "", err
 		}
@@ -2007,7 +2007,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 8, bet})
 	case "six":
-		bet, spaces, err = getBetDetails(args[1:], 2)
+		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 2)
 		if err != nil {
 			return "", err
 		}
@@ -2029,7 +2029,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 5, bet})
 	case "trio":
-		bet, spaces, err = getBetDetails(args[1:], 1)
+		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 1)
 		if err != nil {
 			return "", err
 		}
@@ -2038,7 +2038,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
 	case "basket":
-		bet, _, err = getBetDetails(args[1:], 0)
+		bet, _, err = getBetDetails(append(args[:1], args[2:]...), 0)
 		if err != nil {
 			return "", err
 		}
