@@ -136,7 +136,6 @@ var (
 	startTime                       = time.Now()
 	sqlClient                       *sql.DB
 	typingTimer                     = make(map[string]*time.Timer)
-	userGuilds                      = make(map[string]discordgo.Guild)
 	userIDRegex                     = regexp.MustCompile(`<@(\d+?)>`)
 	userIDUpQuotes                  = make(map[string][]string)
 	voiceMutex                      sync.Mutex
@@ -192,24 +191,8 @@ func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (
 			maxUserID = user.ID
 		}
 	}
-	if maxUserID != "" {
-		return maxUserID, nil
-	}
-	maxSim = 0.0
-	maxUserID = ""
-	if guild.Members != nil {
-		for _, member := range guild.Members {
-			if user := member.User; user != nil {
-				sim := similar.Cosine([]byte(strings.ToLower(user.Username)), usernameBytes)
-				if sim > maxSim {
-					maxSim = sim
-					maxUserID = user.ID
-				}
-			}
-		}
-	}
 	if maxUserID == "" {
-		return "", errors.New("No similar user found")
+		return "", errors.New("No user found")
 	}
 	return maxUserID, nil
 }
@@ -2391,8 +2374,13 @@ func updateGame(s *discordgo.Session) {
 			currentGame = gamelist[index]
 		}
 	}
+	userGuilds, err := s.UserGuilds()
+	if err != nil {
+		fmt.Println("Error getting user guilds", err.Error())
+	}
+
 	now := time.Now()
-	err := s.UpdateStatus(0, currentGame)
+	err = s.UpdateStatus(0, currentGame)
 	if err != nil {
 		fmt.Println("ERROR updating game: ", err.Error())
 	}
@@ -2404,41 +2392,6 @@ func updateGame(s *discordgo.Session) {
 		}
 	}
 	time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
-}
-
-func kickChecker(updateUserGuilds func() ([]*discordgo.Guild, error), ticker <-chan time.Time) {
-	for {
-		select {
-		case <-ticker:
-			newGuilds := make(map[string]discordgo.Guild)
-			guilds, err := updateUserGuilds()
-			if err != nil {
-				fmt.Println("Error getting userGuilds ", err.Error())
-			}
-			for _, guild := range guilds {
-				newGuilds[guild.ID] = *guild
-			}
-			for guildID := range userGuilds {
-				if _, found := newGuilds[guildID]; !found {
-					res, err := http.PostForm("http://textbelt.com/text", url.Values{"number": {phoneNumber}, "message": {"Kicked from " + userGuilds[guildID].Name}})
-					if err != nil {
-						fmt.Println("Error sending SMS", err.Error())
-						continue
-					}
-					defer res.Body.Close()
-					if res.StatusCode != 200 {
-						fmt.Println("Error sending SMS status:", res.Status)
-						body, err := ioutil.ReadAll(res.Body)
-						if err != nil {
-							fmt.Println("Error reading response body", err.Error())
-						}
-						fmt.Println(body)
-					}
-				}
-			}
-			userGuilds = newGuilds
-		}
-	}
 }
 
 func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
@@ -2647,7 +2600,7 @@ func main() {
 		}
 	}()
 
-	userGuildsArr, err := client.UserGuilds()
+	userGuilds, err := client.UserGuilds()
 	if err != nil {
 		fmt.Println("Error getting user guilds", err.Error())
 	}
@@ -2656,8 +2609,7 @@ func main() {
 		fmt.Println("Error starting transaction", err.Error())
 	} else {
 		now := time.Now()
-		for _, guild := range userGuildsArr {
-			userGuilds[guild.ID] = *guild
+		for _, guild := range userGuilds {
 			guild, err = client.Guild(guild.ID)
 			if err != nil {
 				fmt.Println("Error getting guild", err.Error())
@@ -2712,9 +2664,6 @@ func main() {
 	signal.Notify(signals, os.Interrupt)
 
 	go initGameUpdater(client)
-
-	kickCheckTicker := time.NewTicker(5 * time.Minute)
-	go kickChecker(client.UserGuilds, kickCheckTicker.C)
 
 	now := time.Now()
 	rows, err := sqlClient.Query("select ChanId, AuthorId, Time, Content from Reminder where Time > ?", now.In(time.FixedZone("UTC", 0)).Format(time.RFC3339))
