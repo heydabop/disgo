@@ -1622,16 +1622,16 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 	}
 	defer rows.Close()
 
-	gameTimes, firstTime, longestGameLength, err := getGameTimesFromRows(rows)
+	gameTimes, _, longestGameLength, err := getGameTimesFromRows(rows)
 	if err != nil {
 		return "", err
 	}
 
 	var message string
 	if user != nil {
-		message = fmt.Sprintf("%s since %s\n", user.Username, firstTime.Format(time.RFC1123Z))
+		message = fmt.Sprintf("%s since %s\n", user.Username, startTime.Format(time.RFC1123Z))
 	} else {
-		message = fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
+		message = fmt.Sprintf("Since %s\n", startTime.Format(time.RFC1123Z))
 	}
 	for i := 0; i < limit && i < len(gameTimes); i++ {
 		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
