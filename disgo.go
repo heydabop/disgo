@@ -2182,6 +2182,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"meme":           Command(meme),
 		"bitrate":        Command(bitrate),
 		"commands":       Command(help),
+		"command":        Command(help),
 		"age":            Command(age),
 		"lastmessage":    Command(lastUserMessage),
 		"reminders":      Command(reminders),
@@ -2202,7 +2203,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
@@ -2561,7 +2562,7 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 }
 
 func normalizeKarma() {
-	_, err := sqlClient.Exec("UPDATE UserKarma SET Karma = MAX(Karma / 3, 0)")
+	_, err := sqlClient.Exec("UPDATE UserKarma SET Karma = MAX(CAST(Karma / 3 AS INTEGER), 1)")
 	if err != nil {
 		fmt.Println(err.Error())
 	}
