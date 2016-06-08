@@ -1831,10 +1831,9 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 	time.AfterFunc(45*time.Second, func() {
 		if value == 0 {
 			session.ChannelMessageSend(chanID, "Landed on 0")
-			rouletteWheelSpinning = false
-			return
+		} else {
+			session.ChannelMessageSend(chanID, fmt.Sprintf("%s %d", colorStr, value))
 		}
-		session.ChannelMessageSend(chanID, fmt.Sprintf("%s %d", colorStr, value))
 		winner := false
 		for _, bet := range rouletteBets {
 			betWin := false
@@ -1940,7 +1939,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		return "", nil
 	}
 	if !rouletteWheelSpinning {
-		return "The wheel must be spinning to place a bet. Try /roulette", nil
+		return "The wheel must be spinning to place a bet. Try /spin", nil
 	}
 	if guild.ID != rouletteGuildID { //TODO: dont be lazy and allow multiple wheels
 		return "", errors.New("Sorry, the wheel is spinning in another server...")
@@ -2111,10 +2110,10 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **reminders** - messages you your pending reminders
 **rename** [new username] - renames bot
 **roll** [sides (optional)] - "rolls" a die with <sides> sides
-**roulette** or **spin** - spin roulette wheel
 **spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
 **spamuser** [username] - generates a message based on discord logs of <username>
+**spin** or **roulette** - spin roulette wheel
 **soda** - alias for /spam sodapoppin
 **top** [number (optional)] - displays top <number> users sorted by messages sent
 **topCommand** [command] - displays who has issued <command> most
