@@ -269,6 +269,9 @@ func getBetDetails(guildID, authorID string, args []string, req int) (float64, [
 	if err != nil {
 		return -1, []int{}, err
 	}
+	if bet < 0.1 {
+		return -1, []int{}, errors.New("Bet below minimum of 0.1")
+	}
 	if len(args[1:]) < req {
 		return -1, []int{}, fmt.Errorf("Missing spaces(s) in bet; %d given, %d needed", len(args[1:]), req)
 	}
