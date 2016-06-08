@@ -264,7 +264,7 @@ func getBetSpaces(args []string, req int) ([]int, error) {
 	return spaces, nil
 }
 
-func getBetDetails(args []string, req int) (float64, []int, error) {
+func getBetDetails(guildID, authorID string, args []string, req int) (float64, []int, error) {
 	bet, err := strconv.ParseFloat(args[0], 64)
 	if err != nil {
 		return -1, []int{}, err
@@ -278,6 +278,14 @@ func getBetDetails(args []string, req int) (float64, []int, error) {
 	spaces, err := getBetSpaces(args[1:], req)
 	if err != nil {
 		return -1, []int{}, err
+	}
+	var karma float64
+	err = sqlClient.QueryRow("SELECT Karma FROM UserKarma WHERE GuildId = ? AND UserId = ?", guildID, authorID).Scan(&karma)
+	if err != nil {
+		return -1, []int{}, err
+	}
+	if karma < bet {
+		return -1, []int{}, errors.New("Like you can afford that.")
 	}
 	return bet, spaces, nil
 }
@@ -327,7 +335,7 @@ func cwc(session *discordgo.Session, chanID, authorID, messageID string, args []
 	return spam(session, chanID, authorID, messageID, []string{"cwc2016"})
 }
 
-func vote(session *discordgo.Session, chanID, authorID, messageID string, args []string, inc float64) (string, error) {
+func vote(session *discordgo.Session, chanID, authorID, messageID string, args []string, inc float64, isBet bool) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No userID provided")
 	}
@@ -353,7 +361,7 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 		}
 	}
 	if authorID != ownUserID && authorID == userID && inc > 0 {
-		_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + authorID + ">"}, -1)
+		_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + authorID + ">"}, -1, false)
 		if err != nil {
 			return "", err
 		}
@@ -422,25 +430,26 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if err != nil {
 		return "", err
 	}
-	isUpvote := false
-	if inc > 0 {
-		isUpvote = true
+	if !isBet {
+		isUpvote := false
+		if inc > 0 {
+			isUpvote = true
+		}
+		_, err = sqlClient.Exec("insert into Vote(GuildId, MessageId, VoterID, VoteeID, Timestamp, IsUpvote) values (?, ?, ?, ?, ?, ?)",
+			channel.GuildID, messageIDUnit, authorID, userID, time.Now().Format(time.RFC3339Nano), isUpvote)
+		if err != nil {
+			return "", err
+		}
 	}
-	_, err = sqlClient.Exec("insert into Vote(GuildId, MessageId, VoterID, VoteeID, Timestamp, IsUpvote) values (?, ?, ?, ?, ?, ?)",
-		channel.GuildID, messageIDUnit, authorID, userID, time.Now().Format(time.RFC3339Nano), isUpvote)
-	if err != nil {
-		return "", err
-	}
-
 	return "", nil
 }
 
 func upvote(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	return vote(session, chanID, authorID, messageID, args, 1)
+	return vote(session, chanID, authorID, messageID, args, 1, false)
 }
 
 func downvote(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	return vote(session, chanID, authorID, messageID, args, -1)
+	return vote(session, chanID, authorID, messageID, args, -1, false)
 }
 
 func votes(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1832,7 +1841,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 					if err == nil {
 						winner, betWin = true, true
 						session.ChannelMessageSend(chanID, fmt.Sprintf("%s wins %.1f more karma!", user.Username, bet.Payout*bet.Bet))
-						_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + bet.UserID + ">"}, (bet.Payout+1)*bet.Bet)
+						_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + bet.UserID + ">"}, (bet.Payout+1)*bet.Bet, true)
 						if err != nil {
 							session.ChannelMessageSend(chanID, "⚠ `"+err.Error()+"`")
 						}
@@ -1841,13 +1850,13 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 				}
 			}
 			if !betWin {
-				_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + ownUserID + ">"}, bet.Bet)
+				_, err := vote(session, chanID, ownUserID, messageID, []string{"<@" + ownUserID + ">"}, bet.Bet, true)
 				if err != nil {
 					session.ChannelMessageSend(chanID, "⚠ `"+err.Error()+"`")
 				}
 			}
 		}
-		if len(rouletteBets) > 1 && winner == false {
+		if len(rouletteBets) > 0 && winner == false {
 			session.ChannelMessageSend(chanID, "Everyone loses!")
 		}
 		rouletteBets = make([]UserBet, 0)
@@ -1937,7 +1946,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 	var spaces []int
 	switch strings.ToLower(args[1]) {
 	case "single":
-		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 1)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 1)
 		if err != nil {
 			return "", err
 		}
@@ -1946,7 +1955,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if len(args) < 3 {
 			return "", errors.New("Missing number(s) in split bet")
 		}
-		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 2)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 2)
 		if err != nil {
 			return "", err
 		}
@@ -1956,7 +1965,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 			return "", fmt.Errorf("Spaces %v aren't adjacent", spaces)
 		}
 	case "street":
-		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 1)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 1)
 		if err != nil {
 			return "", err
 		}
@@ -1976,7 +1985,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
 	case "corner":
-		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 4)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 4)
 		if err != nil {
 			return "", err
 		}
@@ -1990,7 +1999,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 8, bet})
 	case "six":
-		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 2)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 2)
 		if err != nil {
 			return "", err
 		}
@@ -2012,7 +2021,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 5, bet})
 	case "trio":
-		bet, spaces, err = getBetDetails(append(args[:1], args[2:]...), 1)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 1)
 		if err != nil {
 			return "", err
 		}
@@ -2021,7 +2030,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
 	case "basket":
-		bet, _, err = getBetDetails(append(args[:1], args[2:]...), 0)
+		bet, _, err = getBetDetails(guild.ID, authorID, append(args[:1], args[2:]...), 0)
 		if err != nil {
 			return "", err
 		}
@@ -2029,7 +2038,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 	default:
 		return "", errors.New("Unrecognized bet type")
 	}
-	_, err = vote(session, chanID, ownUserID, messageID, []string{"<@" + authorID + ">"}, -bet)
+	_, err = vote(session, chanID, ownUserID, messageID, []string{"<@" + authorID + ">"}, -bet, true)
 	if err != nil {
 		return "", err
 	}
@@ -2087,13 +2096,13 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **meme** - random meme from channel history
-**ping** - displays ping to discordapp.com`)
+**ping** - displays ping to discordapp.com
+**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
+**recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration`)
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
-**recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration
-**remindme**
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **reminders** - messages you your pending reminders
