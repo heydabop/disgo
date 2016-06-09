@@ -37,10 +37,6 @@ import (
 )
 
 type Command func(*discordgo.Session, string, string, string, []string) (string, error)
-type KarmaDto struct {
-	UserID string
-	Karma  float64
-}
 
 type TwitchStreamReply struct {
 	Stream *struct {
@@ -57,10 +53,6 @@ type TwitchStreamReply struct {
 	} `json:"stream"`
 }
 
-type UserMessageCount struct {
-	AuthorID    string
-	NumMessages int64
-}
 type UserMessageLength struct {
 	AuthorID  string
 	AvgLength float64
@@ -99,15 +91,13 @@ type SteamAppList struct {
 	} `json:"applist"`
 }
 
-type RandomRandom struct {
-	Data []int `json:"data"`
-}
-type RandomResult struct {
-	Random RandomRandom `json:"random"`
-}
 type RandomResponse struct {
-	Result RandomResult `json:"result"`
-	ID     int          `json:"id"`
+	Result struct {
+		Random struct {
+			Data []int `json:"data"`
+		} `json:"random"`
+	} `json:"result"`
+	ID int `json:"id"`
 }
 
 type UserBet struct {
@@ -351,7 +341,7 @@ func cwc(session *discordgo.Session, chanID, authorID, messageID string, args []
 	return spam(session, chanID, authorID, messageID, []string{"cwc2016"})
 }
 
-func vote(session *discordgo.Session, chanID, authorID, messageID string, args []string, inc float64) (string, error) {
+func vote(session *discordgo.Session, chanID, authorID, messageID string, args []string, inc int) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No userID provided")
 	}
@@ -421,7 +411,7 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "Really?...", nil
 	}
 
-	var karma float64
+	var karma int
 	err = sqlClient.QueryRow("select Karma from UserKarma where GuildId = ? and UserId = ?", channel.GuildID, userID).Scan(&karma)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -486,23 +476,25 @@ func votes(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", err
 	}
 	defer rows.Close()
-	var votes []KarmaDto
+	var votes []int
+	var users []string
 	for rows.Next() {
 		var userID string
-		var karma float64
+		var karma int
 		err := rows.Scan(&userID, &karma)
 		if err != nil {
 			return "", err
 		}
-		votes = append(votes, KarmaDto{userID, karma})
+		votes = append(votes, karma)
+		users = append(users, userID)
 	}
 	finalString := ""
-	for _, vote := range votes {
-		user, err := session.User(vote.UserID)
+	for i, vote := range votes {
+		user, err := session.User(users[i])
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %.1f\n", user.Username, vote.Karma)
+		finalString += fmt.Sprintf("%s — %d\n", user.Username, vote)
 	}
 	return finalString, nil
 }
@@ -527,23 +519,25 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", err
 	}
 	defer rows.Close()
-	var monies []KarmaDto
+	var monies []int
+	var users []string
 	for rows.Next() {
 		var userID string
-		var money float64
+		var money int
 		err := rows.Scan(&userID, &money)
 		if err != nil {
 			return "", err
 		}
-		monies = append(monies, KarmaDto{userID, money})
+		monies = append(monies, money)
+		users = append(users, userID)
 	}
-	finalString := ""
-	for _, vote := range monies {
-		user, err := session.User(vote.UserID)
+	finalString := "(Those not listed have 10)\n"
+	for i, money := range monies {
+		user, err := session.User(users[i])
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %.1f\n", user.Username, vote.Karma)
+		finalString += fmt.Sprintf("%s — %d\n", user.Username, money)
 	}
 	return finalString, nil
 }
@@ -619,7 +613,8 @@ func top(session *discordgo.Session, chanID, authorID, messageID string, args []
 		return "", err
 	}
 	defer rows.Close()
-	var counts []UserMessageCount
+	var counts []int64
+	var users []string
 	for rows.Next() {
 		var authorID string
 		var numMessages int64
@@ -627,15 +622,16 @@ func top(session *discordgo.Session, chanID, authorID, messageID string, args []
 		if err != nil {
 			return "", err
 		}
-		counts = append(counts, UserMessageCount{authorID, numMessages})
+		counts = append(counts, numMessages)
+		users = append(users, authorID)
 	}
 	finalString := ""
-	for _, count := range counts {
-		user, err := session.User(count.AuthorID)
+	for i, count := range counts {
+		user, err := session.User(users[i])
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %d\n", user.Username, count.NumMessages)
+		finalString += fmt.Sprintf("%s — %d\n", user.Username, count)
 	}
 	return finalString, nil
 }
@@ -728,12 +724,12 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 		if err != nil {
 			return "", err
 		}
-		var authorKarma float64
+		var authorKarma int
 		err = sqlClient.QueryRow("select Karma from UserKarma where GuildId = ? and UserId = ?", channel.GuildID, authorID).Scan(&authorKarma)
 		if err != nil {
 			authorKarma = 0
 		}
-		newLockedMinutes := float64(Rand.Intn(30)) + 45 + 10*authorKarma
+		newLockedMinutes := Rand.Intn(30) + 45 + 10*authorKarma
 		if newLockedMinutes < 30 {
 			newLockedMinutes = 30
 		}
@@ -748,9 +744,9 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 			return "", err
 		}
 		if authorKarma > 0 {
-			return fmt.Sprintf("%s's name change will last for an extra %.f minutes thanks to their karma!", author.Username, 10*authorKarma), nil
+			return fmt.Sprintf("%s's name change will last for an extra %d minutes thanks to their karma!", author.Username, 10*authorKarma), nil
 		} else if authorKarma < 0 {
-			return fmt.Sprintf("%s's name change will last up to %.f minutes less due to their karma...", author.Username, -10*authorKarma), nil
+			return fmt.Sprintf("%s's name change will last up to %d minutes less due to their karma...", author.Username, -10*authorKarma), nil
 		}
 	} else {
 		return "I'm not ready to change who I am.", nil
@@ -1936,7 +1932,7 @@ func bet(session *discordgo.Session, chanID, authorID, messageID string, args []
 			return "", err
 		}
 		_, err = session.ChannelMessageSend(privateChannel.ID, `The following bet types are allowed
-All of these are proceeded with /bet <amount>, amount being how much karma you bet >= 0.1
+All of these are proceeded with /bet <amount>, amount being how many bux you bet >= 0.1
 Inside
 `+"```"+`Straight - single <number> - payout if ball lands on given number, 0-36 inclusive - /bet 0.5 single 13
 Split - split <number> <number> - on 1 of the 2 adjacent numbers - /bet 0.7 split 16 17
@@ -2719,7 +2715,7 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 }
 
 func normalizeKarma() {
-	_, err := sqlClient.Exec("UPDATE UserKarma SET Karma = MAX(CAST(Karma / 3 AS INTEGER), 0)")
+	_, err := sqlClient.Exec("UPDATE UserKarma SET Karma = MAX(Karma / 3, 0)")
 	if err != nil {
 		fmt.Println(err.Error())
 	}
