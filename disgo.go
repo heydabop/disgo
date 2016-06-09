@@ -2251,6 +2251,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **meme** - random meme from channel history
+**money** [number (optional)] - displays top <number> users and their money
 **ping** - displays ping to discordapp.com
 **playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
 **recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration`)
