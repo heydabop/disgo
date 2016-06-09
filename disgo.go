@@ -291,6 +291,13 @@ func getBetDetails(guildID, authorID string, args []string, req int) (float64, [
 	return bet, spaces, nil
 }
 
+func gambleChannelCheck(guildID, channelName string) error {
+	if guildID == "98470233999675392" && channelName == "too_gamble" {
+		return nil
+	}
+	return errors.New("")
+}
+
 func spam(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	if len(args) < 1 {
 		cmd := exec.Command("find", "-iname", "*_nolink")
@@ -537,7 +544,7 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %.1f\n", user.Username, money)
+		finalString += fmt.Sprintf("%s — %.2f\n", user.Username, money)
 	}
 	return finalString, nil
 }
@@ -1843,9 +1850,6 @@ func minecraft(session *discordgo.Session, chanID, authorID, messageID string, a
 }
 
 func roulette(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	if rouletteWheelSpinning {
-		return "Wheel is already spinning, place a bet", nil
-	}
 	channel, err := session.State.Channel(chanID)
 	if err != nil {
 		return "", err
@@ -1853,6 +1857,13 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 	guild, err := session.State.Guild(channel.GuildID)
 	if err != nil {
 		return "", err
+	}
+	err = gambleChannelCheck(guild.ID, channel.Name)
+	if err != nil {
+		return "Please don't do that in here. Try #too_gamble", nil
+	}
+	if rouletteWheelSpinning {
+		return "Wheel is already spinning, place a bet", nil
 	}
 	res, err := http.Post("https://api.random.org/json-rpc/1/invoke", "application/json", strings.NewReader(`{"jsonrpc": "2.0","method": "generateIntegers","params": {"apiKey": "9f397d6a-c4bd-49b6-9f9c-621183b2d2e1","n": 1,"min": 0,"max": 36},"id": `+messageID+`}`))
 	if err != nil {
@@ -1925,6 +1936,10 @@ func bet(session *discordgo.Session, chanID, authorID, messageID string, args []
 	guild, err := session.State.Guild(channel.GuildID)
 	if err != nil {
 		return "", err
+	}
+	err = gambleChannelCheck(guild.ID, channel.Name)
+	if err != nil {
+		return "Please don't do that in here. Try #too_gamble", nil
 	}
 	if len(args) < 2 {
 		privateChannel, err := session.UserChannelCreate(authorID)
@@ -2725,6 +2740,48 @@ func normalizeKarma() {
 	time.AfterFunc(nextRun.Sub(now), normalizeKarma)
 }
 
+func giveAllowance() {
+	now := time.Now()
+	nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
+	time.AfterFunc(nextRun.Sub(now), giveAllowance)
+	rows, err := sqlClient.Query("SELECT GuildId, UserId FROM UserMoney")
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+	defer rows.Close()
+	var karmas []int
+	var guildIDs, userIDs []string
+	for rows.Next() {
+		var guildID, userID string
+		err := rows.Scan(&guildID, &userID)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		var karma int
+		err = sqlClient.QueryRow("SELECT Karma FROM UserKarma WHERE GuildId = ? AND UserId = ?", guildID, userID).Scan(&karma)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				karma = 0
+			} else {
+				fmt.Println(err.Error())
+				return
+			}
+		}
+		karmas = append(karmas, karma)
+		guildIDs = append(guildIDs, guildID)
+		userIDs = append(userIDs, userID)
+	}
+	for i := range karmas {
+		_, err = sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", math.Min(2, 2+0.2*float64(karmas[i])), guildIDs[i], userIDs[i])
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -2857,6 +2914,10 @@ func main() {
 
 	//nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
 	//time.AfterFunc(nextRun.Sub(now), normalizeKarma)
+
+	now = time.Now()
+	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
+	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
 	var input string
 	fmt.Scanln(&input)
