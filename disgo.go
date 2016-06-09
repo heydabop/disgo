@@ -1901,7 +1901,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 					user, err := session.User(bet.UserID)
 					if err == nil {
 						winner, betWin = true, true
-						session.ChannelMessageSend(chanID, fmt.Sprintf("%s wins %.1f more asuh bux!", user.Username, bet.Payout*bet.Bet))
+						session.ChannelMessageSend(chanID, fmt.Sprintf("%s wins %.2f more asuh bux!", user.Username, bet.Payout*bet.Bet))
 						err := changeMoney(guild.ID, bet.UserID, (bet.Payout+1)*bet.Bet)
 						if err != nil {
 							session.ChannelMessageSend(chanID, "⚠ `"+err.Error()+"`")
@@ -1955,7 +1955,7 @@ Street - street <number> - on 1 of the numbers in same row as given number - /be
 Corner - corner <number> <number> <number> <number> - on one of 4 given adjacent numbers - /bet 1 corner 25 26 28 29
 Six Line - six <number> <number> - on one of 6 numbers from adjacent rows in which the 2 given numbers lie - /bet 1.5 six 13 16
 Trio - trio <number> - on 0 or given number (1, 2, or 3) - /bet 1.2 trio 2
-Basket - basket - on 0, 1, 2, or 3`+"```"+`
+Basket - basket - on 0, 1, or 2`+"```"+`
 Outside
 `+"```"+`Low - low - on 1-18
 High - high - on 19-36
@@ -2104,7 +2104,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if err != nil {
 			return "", err
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, []int{0, 1, 2, 3}, 11, bet})
+		rouletteBets = append(rouletteBets, UserBet{authorID, []int{0, 1, 2}, 11, bet})
 	case "low":
 		bet, _, err = getBetDetails(guild.ID, authorID, betArgs, 0)
 		if err != nil {
@@ -2769,12 +2769,15 @@ func giveAllowance() {
 				return
 			}
 		}
+		if karma < 0 {
+			karma = 0
+		}
 		karmas = append(karmas, karma)
 		guildIDs = append(guildIDs, guildID)
 		userIDs = append(userIDs, userID)
 	}
 	for i := range karmas {
-		_, err = sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", math.Min(2, 2+0.2*float64(karmas[i])), guildIDs[i], userIDs[i])
+		_, err = sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", math.Min(3, 3+0.2*float64(karmas[i])), guildIDs[i], userIDs[i])
 		if err != nil {
 			fmt.Println(err.Error())
 			return
