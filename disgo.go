@@ -519,11 +519,11 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", err
 	}
 	defer rows.Close()
-	var monies []int
+	var monies []float64
 	var users []string
 	for rows.Next() {
 		var userID string
-		var money int
+		var money float64
 		err := rows.Scan(&userID, &money)
 		if err != nil {
 			return "", err
@@ -537,7 +537,7 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %d\n", user.Username, money)
+		finalString += fmt.Sprintf("%s — %.1f\n", user.Username, money)
 	}
 	return finalString, nil
 }
