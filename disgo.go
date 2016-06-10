@@ -1954,7 +1954,7 @@ Split - split <number> <number> - on 1 of the 2 adjacent numbers - /bet 0.7 spli
 Street - street <number> - on 1 of the numbers in same row as given number - /bet 0.4 street 13
 Corner - corner <number> <number> <number> <number> - on one of 4 given adjacent numbers - /bet 1 corner 25 26 28 29
 Six Line - six <number> <number> - on one of 6 numbers from adjacent rows in which the 2 given numbers lie - /bet 1.5 six 13 16
-Trio - trio <number> - on 0 or given number (1, 2, or 3) - /bet 1.2 trio 2
+Trio - trio <number> <number> - on 0 and one of the pairs 1, 2 or 2, 3- /bet 1.2 trio 1 2
 Basket - basket - on 0, 1, or 2`+"```"+`
 Outside
 `+"```"+`Low - low - on 1-18
@@ -2091,13 +2091,14 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 5, bet})
 	case "trio":
-		bet, spaces, err = getBetDetails(guild.ID, authorID, betArgs, 1)
+		bet, spaces, err = getBetDetails(guild.ID, authorID, betArgs, 2)
 		if err != nil {
 			return "", err
 		}
-		if spaces[0] != 1 && spaces[0] != 2 && spaces[0] != 3 {
-			return "", errors.New("Trio bet is only valid on 1, 2, or 3")
+		if spaces[0] < 1 || spaces[0] > 3 || spaces[1] < 1 || spaces[1] > 3 || int(math.Abs(float64(spaces[0]) - float64(spaces[1]))) != 1 {
+			return "", errors.New("Trio bet is only valid with 1 and 2 or 2 and 3")
 		}
+		spaces = append(spaces, 0)
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
 	case "basket":
 		bet, _, err = getBetDetails(guild.ID, authorID, betArgs, 0)
