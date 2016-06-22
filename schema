@@ -1,8 +1,10 @@
 CREATE TABLE OwnUsername(Id integer primary key autoincrement, AuthorId varchar(30), Timestamp text, Username text, LockedMinutes int null);
 CREATE TABLE UserPresence(Id integer primary key autoincrement, GuildId varchar(30), UserId varchar(30), Timestamp text, Presence varchar(20), Game text);
-CREATE TABLE UserKarma(GuildId varchar(30), UserId varchar(30), Karma integer, unique(GuildId, UserId));
 CREATE TABLE Vote(Id integer primary key autoincrement, GuildId varchar(30), MessageId integer, VoterId varchar(30), VoteeId varchar(30), Timestamp text, IsUpvote bit, foreign key(MessageId) references Message(Id));
-CREATE TABLE Message(Id unsigned big int primary key, ChanId varchar(30), AuthorId varchar(30), Timestamp text, Content text);
+CREATE TABLE "Message"(Id unsigned big int primary key, ChanId varchar(30), AuthorId varchar(30), Timestamp text, Content text);
 CREATE TABLE DiscordQuote (Id integer primary key autoincrement, ChanId varchar(30), AuthorId varchar(30) null, Content text, Score integer, IsFresh bit);
-CREATE TABLE Reminder(Id integer primary key autoincrement, ChanId varchar(30), AuthorId varchar(30), Time text, Content text);
+CREATE TABLE "Reminder"(Id integer primary key autoincrement, ChanId varchar(30), AuthorId varchar(30), Time text, Content text);
 CREATE TABLE VoiceState(Id integer primary key autoincrement, GuildId varchar(30), ChanId varchar(30), UserId varchar(30), SessionId varchar(60), Deaf bit, Mute bit, SelfDeaf bit, SelfMute bit, Suppress bit, Timestamp text);
+CREATE TABLE UserMoney(GuildId varchar(30), UserId varchar(30), Money real, unique(GuildId, UserId));
+CREATE TABLE UserKarma(GuildId varchar(30), UserId varchar(30), Karma integer, unique(GuildId, UserId));
+CREATE TABLE MessageDelete(MessageId unsigned big int primary key, foreign key(MessageId) references Message(Id));
