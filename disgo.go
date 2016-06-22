@@ -722,7 +722,7 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 		if err != nil {
 			return "", err
 		}
-		newSelf, err := session.UserUpdate(loginEmail, loginPassword, newUsername, self.Avatar, "")
+		newSelf, err := session.UserUpdate("", "", newUsername, self.Avatar, "")
 		if err != nil {
 			return "", err
 		}
@@ -2429,10 +2429,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println("ERROR inserting into Message")
 			fmt.Println(err.Error())
 		}
-		err = s.ChannelMessageAck(m.ChannelID, m.ID)
-		if err != nil {
-			fmt.Println("Error ACKing message", err.Error())
-		}
 
 		if m.Author.ID == ownUserID {
 			return
@@ -2807,7 +2803,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	client, err := discordgo.New(loginEmail, loginPassword)
+	client, err := discordgo.New(botToken)
 	if err != nil {
 		fmt.Println(err)
 		return
