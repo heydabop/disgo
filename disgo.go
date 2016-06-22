@@ -2095,7 +2095,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if err != nil {
 			return "", err
 		}
-		if spaces[0] < 1 || spaces[0] > 3 || spaces[1] < 1 || spaces[1] > 3 || int(math.Abs(float64(spaces[0]) - float64(spaces[1]))) != 1 {
+		if spaces[0] < 1 || spaces[0] > 3 || spaces[1] < 1 || spaces[1] > 3 || int(math.Abs(float64(spaces[0])-float64(spaces[1]))) != 1 {
 			return "", errors.New("Trio bet is only valid with 1 and 2 or 2 and 3")
 		}
 		spaces = append(spaces, 0)
@@ -2650,6 +2650,19 @@ func handleGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMemberRemov
 	}
 }
 
+func handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
+	messageID, err := strconv.ParseUint(m.ID, 10, 64)
+	if err != nil {
+		fmt.Println("ERROR parsing message ID " + err.Error())
+		return
+	}
+	_, err = sqlClient.Exec("INSERT INTO MessageDelete (MessageId) values (?)", messageID)
+	if err != nil {
+		fmt.Println("ERROR recording MessageDelete", err.Error())
+		return
+	}
+}
+
 func tailMinecraftLog(session *discordgo.Session) {
 	logTail := exec.Command("tail", "-F", "-n", "0", minecraftLogPath)
 	logOut, err := logTail.StdoutPipe()
@@ -2814,6 +2827,7 @@ func main() {
 	client.AddHandler(handleVoiceUpdate)
 	client.AddHandler(handleGuildMemberAdd)
 	client.AddHandler(handleGuildMemberRemove)
+	client.AddHandler(handleMessageDelete)
 	client.Open()
 	defer client.Close()
 	defer client.Logout()
