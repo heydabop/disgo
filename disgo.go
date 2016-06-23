@@ -2244,14 +2244,18 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 	if err != nil {
 		return "", err
 	}
+	guild, err := session.State.Guild(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
 	var rows *sql.Rows
 	var enteredGame string
 	if len(args) > 0 {
 		enteredGame = strings.Join(args, " ")
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND (LOWER(Game) = ? OR Game = '') ORDER BY Timestamp asc", channel.GuildID, ownUserID, strings.ToLower(enteredGame))
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND (LOWER(Game) = ? OR Game = '') ORDER BY Timestamp asc", guild.ID, ownUserID, strings.ToLower(enteredGame))
 	} else {
 		enteredGame = "All Games"
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp asc", channel.GuildID, ownUserID)
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp asc", guild.ID, ownUserID)
 	}
 	if err != nil {
 		return "", err
@@ -2277,7 +2281,7 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 
 		lastTime, timeFound := userStarted[userID]
 		lastGame, gameFound := userGame[userID]
-		if  !timeFound || (gameFound && len(lastGame) == 0) {
+		if !timeFound || (gameFound && len(lastGame) == 0) {
 			userStarted[userID] = currTime
 			userGame[userID] = game
 			continue
@@ -2287,7 +2291,7 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 			if currTime.Hour() == lastTime.Hour() {
 				hourCount[currTime.Hour()] += uint64(currTime.Minute() - lastTime.Minute())
 			} else if currTime.Hour() > lastTime.Hour() {
-				hourCount[lastTime.Hour()] += uint64( 60 - lastTime.Minute())
+				hourCount[lastTime.Hour()] += uint64(60 - lastTime.Minute())
 				hourCount[currTime.Hour()] += uint64(currTime.Minute())
 				for i := lastTime.Hour() + 1; i < currTime.Hour(); i++ {
 					hourCount[i] += 60
@@ -2308,14 +2312,15 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 	}
 
 	datapoints := ""
-	maxPerHour := uint64(0)
+	maxPerHour := float64(0)
 	for i := 0; i <= 23; i++ {
-		if hourCount[i] > maxPerHour {
-			maxPerHour = hourCount[i]
+		gameHours := float64(hourCount[i]) / 60
+		if gameHours > maxPerHour {
+			maxPerHour = gameHours
 		}
-		datapoints += fmt.Sprintf("%d %d\n", i, hourCount[i])
+		datapoints += fmt.Sprintf("%d %.2f\n", i, gameHours)
 	}
-	if maxPerHour < 1 {
+	if maxPerHour == 0 {
 		return "", fmt.Errorf("No recorded playtime for %s\n", enteredGame)
 	}
 
@@ -2334,11 +2339,8 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 		return "", err
 	}
 
-	title := fmt.Sprintf("#%s since %s", channel.Name, firstTime.Format(time.RFC1123Z))
-	if len(enteredGame) > 0 {
-		title = fmt.Sprintf("%s in #%s since %s", enteredGame, channel.Name, firstTime.Format(time.RFC1123Z))
-	}
-	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Game Minutes"; set yrange [0:%d]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), uint64(math.Ceil(float64(maxPerHour)*1.1)), title, datapointsFile.Name())).Run()
+	title := fmt.Sprintf("%s in %s since %s", enteredGame, guild.Name, firstTime.Format(time.RFC1123Z))
+	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Game Hours"; set yrange [0:%d]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), uint64(math.Ceil(float64(maxPerHour)*1.1)), title, datapointsFile.Name())).Run()
 	if err != nil {
 		return "", err
 	}
@@ -2368,7 +2370,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **downvote** [@user] - downvotes user
 **@[user]--** - downvotes user
 **forsen** - alias for /spam forsenlol
-**gameactivity** [game (optional)] - shows played minutes per hour <game> (or any game if none provided) over lifetime of channel
+**gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel
 **karma** [number (optional)] - displays top <number> users and their karma
 **lastseen** [username] - displays when <username> was last seen
 **lastmessage** [username] - displays when <username> last sent a message
