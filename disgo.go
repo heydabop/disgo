@@ -1738,7 +1738,7 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
-	hourCount := make([]uint64, 24, 24)
+	hourCount := make([]uint64, 24)
 	var firstTime, msgTime time.Time
 	if rows.Next() {
 		var timestamp string
@@ -2239,12 +2239,122 @@ func topcommand(session *discordgo.Session, chanID, authorID, messageID string, 
 	return message, nil
 }
 
+func gameactivity(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	var rows *sql.Rows
+	var enteredGame string
+	if len(args) > 0 {
+		enteredGame = strings.Join(args, " ")
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND (LOWER(Game) = ? OR Game = '') ORDER BY Timestamp asc", channel.GuildID, ownUserID, strings.ToLower(enteredGame))
+	} else {
+		enteredGame = "All Games"
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp asc", channel.GuildID, ownUserID)
+	}
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	hourCount := make([]uint64, 24)
+	userStarted := make(map[string]time.Time)
+	userGame := make(map[string]string)
+	firstTime := time.Now()
+	for rows.Next() {
+		var userID, timestamp, game string
+		err := rows.Scan(&userID, &timestamp, &game)
+		if err != nil {
+			return "", err
+		}
+		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return "", err
+		}
+		if currTime.Before(firstTime) {
+			firstTime = currTime
+		}
+
+		lastTime, timeFound := userStarted[userID]
+		lastGame, gameFound := userGame[userID]
+		if  !timeFound || (gameFound && len(lastGame) == 0) {
+			userStarted[userID] = currTime
+			userGame[userID] = game
+			continue
+		} else if game == lastGame {
+			continue
+		} else {
+			if currTime.Hour() == lastTime.Hour() {
+				hourCount[currTime.Hour()] += uint64(currTime.Minute() - lastTime.Minute())
+			} else if currTime.Hour() > lastTime.Hour() {
+				hourCount[lastTime.Hour()] += uint64( 60 - lastTime.Minute())
+				hourCount[currTime.Hour()] += uint64(currTime.Minute())
+				for i := lastTime.Hour() + 1; i < currTime.Hour(); i++ {
+					hourCount[i] += 60
+				}
+			} else {
+				hourCount[lastTime.Hour()] += uint64(60 - lastTime.Minute())
+				hourCount[currTime.Hour()] += uint64(currTime.Minute())
+				for i := lastTime.Hour() + 1; i <= 23; i++ {
+					hourCount[i] += 60
+				}
+				for i := 0; i < currTime.Hour(); i++ {
+					hourCount[i] += 60
+				}
+			}
+			userStarted[userID] = currTime
+			userGame[userID] = game
+		}
+	}
+
+	datapoints := ""
+	maxPerHour := uint64(0)
+	for i := 0; i <= 23; i++ {
+		if hourCount[i] > maxPerHour {
+			maxPerHour = hourCount[i]
+		}
+		datapoints += fmt.Sprintf("%d %d\n", i, hourCount[i])
+	}
+	if maxPerHour < 1 {
+		return "", fmt.Errorf("No recorded playtime for %s\n", enteredGame)
+	}
+
+	datapointsFile, err := ioutil.TempFile("", "disgo")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(datapointsFile.Name())
+	plotFile, err := ioutil.TempFile("", "disgo")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(plotFile.Name())
+	err = ioutil.WriteFile(datapointsFile.Name(), []byte(datapoints), os.ModeTemporary)
+	if err != nil {
+		return "", err
+	}
+
+	title := fmt.Sprintf("#%s since %s", channel.Name, firstTime.Format(time.RFC1123Z))
+	if len(enteredGame) > 0 {
+		title = fmt.Sprintf("%s in #%s since %s", enteredGame, channel.Name, firstTime.Format(time.RFC1123Z))
+	}
+	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Game Minutes"; set yrange [0:%d]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), uint64(math.Ceil(float64(maxPerHour)*1.1)), title, datapointsFile.Name())).Run()
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelFileSend(chanID, plotFile.Name()+".png", plotFile)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**activity** - shows average messages per hour over lifetime of channel
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**activity** - shows messages per hour over lifetime of channel
 **age** [username] - displays how long [username] has been in this server
 **asuh** - joins your voice channel
 **ayy**
@@ -2258,6 +2368,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **downvote** [@user] - downvotes user
 **@[user]--** - downvotes user
 **forsen** - alias for /spam forsenlol
+**gameactivity** [game (optional)] - shows played minutes per hour <game> (or any game if none provided) over lifetime of channel
 **karma** [number (optional)] - displays top <number> users and their karma
 **lastseen** [username] - displays when <username> was last seen
 **lastmessage** [username] - displays when <username> last sent a message
@@ -2364,6 +2475,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"spin":           Command(roulette),
 		"topcommand":     Command(topcommand),
 		"money":          Command(money),
+		"gameactivity":   Command(gameactivity),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -2531,14 +2643,14 @@ func initGameUpdater(s *discordgo.Session) {
 		gamelist[i] = app.Name
 	}
 
-	go updateGame(s)
+	time.AfterFunc(time.Duration(960+Rand.Intn(600))*time.Second, func() { updateGame(s) })
 }
 
 func updateGame(s *discordgo.Session) {
+	defer time.AfterFunc(time.Duration(960+Rand.Intn(600))*time.Second, func() { updateGame(s) })
 	if currentGame != "" {
 		changeGame := Rand.Intn(3)
 		if changeGame != 0 {
-			time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
 			return
 		}
 		currentGame = ""
@@ -2567,7 +2679,6 @@ func updateGame(s *discordgo.Session) {
 			fmt.Println(err.Error())
 		}
 	}
-	time.AfterFunc(time.Duration(480+Rand.Intn(300))*time.Second, func() { updateGame(s) })
 }
 
 func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
@@ -2930,7 +3041,5 @@ func main() {
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
-	var input string
-	fmt.Scanln(&input)
-	return
+	select {}
 }
