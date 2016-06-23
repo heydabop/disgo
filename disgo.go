@@ -1898,16 +1898,13 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 			betWin := false
 			for _, betSpace := range bet.WinningNumbers {
 				if betSpace == value {
-					user, err := session.User(bet.UserID)
-					if err == nil {
-						winner, betWin = true, true
-						session.ChannelMessageSend(chanID, fmt.Sprintf("%s wins %.2f more asuh bux!", user.Username, bet.Payout*bet.Bet))
-						err := changeMoney(guild.ID, bet.UserID, (bet.Payout+1)*bet.Bet)
-						if err != nil {
-							session.ChannelMessageSend(chanID, "⚠ `"+err.Error()+"`")
-						}
-						break
+					winner, betWin = true, true
+					session.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> wins %.2f more asuh bux!", bet.UserID, bet.Payout*bet.Bet))
+					err := changeMoney(guild.ID, bet.UserID, (bet.Payout+1)*bet.Bet)
+					if err != nil {
+						session.ChannelMessageSend(chanID, "⚠ `"+err.Error()+"`")
 					}
+					break
 				}
 			}
 			if !betWin {
