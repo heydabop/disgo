@@ -2359,6 +2359,10 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 	return "", nil
 }
 
+func invite(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0", appID), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2486,6 +2490,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"topcommand":     Command(topcommand),
 		"money":          Command(money),
 		"gameactivity":   Command(gameactivity),
+		"invite":         Command(invite),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
