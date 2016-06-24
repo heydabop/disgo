@@ -291,8 +291,8 @@ func getBetDetails(guildID, authorID string, args []string, req int) (float64, [
 	return bet, spaces, nil
 }
 
-func gambleChannelCheck(guildID, channelName string) error {
-	if guildID == "98470233999675392" && channelName == "too_gamble" {
+func gambleChannelCheck(guildID, chanID string) error {
+	if guildID == "98470233999675392" && chanID == "190518994875318272" {
 		return nil
 	}
 	return errors.New("")
@@ -1858,9 +1858,13 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
-	err = gambleChannelCheck(guild.ID, channel.Name)
+	err = gambleChannelCheck(guild.ID, chanID)
 	if err != nil {
-		return "Please don't do that in here. Try #too_gamble", nil
+		gambleChan, err := session.State.Channel("190518994875318272")
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Please don't do that in here. Try #%s", gambleChan.Name), nil
 	}
 	if rouletteWheelSpinning {
 		return "Wheel is already spinning, place a bet", nil
@@ -1934,9 +1938,13 @@ func bet(session *discordgo.Session, chanID, authorID, messageID string, args []
 	if err != nil {
 		return "", err
 	}
-	err = gambleChannelCheck(guild.ID, channel.Name)
+	err = gambleChannelCheck(guild.ID, chanID)
 	if err != nil {
-		return "Please don't do that in here. Try #too_gamble", nil
+		gambleChan, err := session.State.Channel("190518994875318272")
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Please don't do that in here. Try #%s", gambleChan.Name), nil
 	}
 	if len(args) < 2 {
 		privateChannel, err := session.UserChannelCreate(authorID)
