@@ -1,5 +1,7 @@
 config.go
 disgo
 *.db
-*.bak
+*.bak*
 *.mp3
+avatar.png
+avatar.jpg
