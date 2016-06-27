@@ -2396,6 +2396,59 @@ func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string
 	return "", nil
 }
 
+func lastPlayed(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No username provided")
+	}
+	var userID string
+	var err error
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		if err != nil {
+			return "", err
+		}
+	}
+	user, err := session.User(userID)
+	if err != nil {
+		return "", err
+	}
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	guild, err := session.State.Guild(channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	var game *discordgo.Game
+	for _, presence := range guild.Presences {
+		if presence.User != nil && presence.User.ID == user.ID {
+			game = presence.Game
+			break
+		}
+	}
+	if game != nil {
+		return fmt.Sprintf("%s is currently playing %s", user.Username, game.Name), nil
+	}
+	var lastPlayedTime, lastPlayedGame string
+	err = sqlClient.QueryRow("select Timestamp, Game from UserPresence where GuildId = ? and UserId = ? and Game != '' order by Timestamp desc limit 1", guild.ID, userID).Scan(&lastPlayedTime, &lastPlayedGame)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Sprintf("I've never seen %s play anything...", user.Username), nil
+		}
+		return "", err
+	}
+	lastPlayed, err := time.Parse(time.RFC3339Nano, lastPlayedTime)
+	if err != nil {
+		return "", err
+	}
+	timeSince := time.Since(lastPlayed)
+	lastSeenStr := timeSinceStr(timeSince)
+	return fmt.Sprintf("%s last played %s %s ago", user.Username, lastPlayedGame, lastSeenStr), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2417,6 +2470,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **forsen** - alias for /spam forsenlol
 **gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel
 **karma** [number (optional)] - displays top <number> users and their karma
+**lastplayed** [username] - displays game last played by <username>
 **lastseen** [username] - displays when <username> was last seen
 **lastmessage** [username] - displays when <username> last sent a message
 **lirik** - alias for /spam lirik
@@ -2525,6 +2579,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"gameactivity":   Command(gameactivity),
 		"invite":         Command(invite),
 		"updateavatar":   Command(updateAvatar),
+		"lastplayed":     Command(lastPlayed),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
