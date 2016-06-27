@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
@@ -2363,6 +2364,38 @@ func invite(session *discordgo.Session, chanID, authorID, messageID string, args
 	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0", appID), nil
 }
 
+func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	avatar, err := os.Open("avatar.jpg")
+	if err != nil {
+		return "", err
+	}
+	defer avatar.Close()
+
+	info, err := avatar.Stat()
+	if err != nil {
+		return "", err
+	}
+	buf := make([]byte, info.Size())
+
+	reader := bufio.NewReader(avatar)
+	reader.Read(buf)
+
+	avatarBase64 := base64.StdEncoding.EncodeToString(buf)
+	avatarBase64 = fmt.Sprintf("data:image/jpeg;base64,%s", avatarBase64)
+
+	self, err := session.User("@me")
+	if err != nil {
+		return "", err
+	}
+
+	_, err = session.UserUpdate("", "", self.Username, avatarBase64, "")
+	if err != nil {
+		return "", err
+	}
+
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2491,6 +2524,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"money":          Command(money),
 		"gameactivity":   Command(gameactivity),
 		"invite":         Command(invite),
+		"updateavatar":   Command(updateAvatar),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
