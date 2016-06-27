@@ -2365,7 +2365,7 @@ func invite(session *discordgo.Session, chanID, authorID, messageID string, args
 }
 
 func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	avatar, err := os.Open("avatar.jpg")
+	avatar, err := os.Open("avatar.png")
 	if err != nil {
 		return "", err
 	}
@@ -2381,7 +2381,7 @@ func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string
 	reader.Read(buf)
 
 	avatarBase64 := base64.StdEncoding.EncodeToString(buf)
-	avatarBase64 = fmt.Sprintf("data:image/jpeg;base64,%s", avatarBase64)
+	avatarBase64 = fmt.Sprintf("data:image/png;base64,%s", avatarBase64)
 
 	self, err := session.User("@me")
 	if err != nil {
