@@ -2644,6 +2644,12 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		defer func() {
+			if r := recover(); r != nil {
+				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠ `panic: %+v`⚠", r))
+			}
+		}()
+
 		now := time.Now()
 		fmt.Printf("%20s %20s %20s > %s\n", m.ChannelID, now.Format(time.Stamp), m.Author.Username, m.Content)
 
