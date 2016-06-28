@@ -2209,7 +2209,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		betSpaces := make([]int, 12)
 		for i, row := range rouletteTableValues {
-			betSpaces[i] = row[spaces[0]]
+			betSpaces[i] = row[spaces[0]-1]
 		}
 		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 2, bet})
 	case "snake":
