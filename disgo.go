@@ -831,15 +831,24 @@ func deleteLastMessage(session *discordgo.Session, chanID, authorID, messageID s
 }
 
 func kickme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	channel, err := session.State.Channel(chanID)
+	perm, err := session.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
 		return "", err
 	}
-	err = session.GuildMemberDelete(channel.GuildID, authorID)
-	if err != nil {
-		return "", err
+	if perm&0x2 == 0x2 {
+		channel, err := session.State.Channel(chanID)
+		if err != nil {
+			return "", err
+		}
+		time.AfterFunc(time.Second*time.Duration(Rand.Intn(6)+4), func() {
+			err := session.GuildMemberDelete(channel.GuildID, authorID)
+			if err != nil {
+				session.ChannelMessageSend(chanID, "jk")
+			}
+		})
+		return "See ya nerd.", nil
 	}
-	return "See ya nerd.", nil
+	return "You wish.", nil
 }
 
 func spamuser(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
