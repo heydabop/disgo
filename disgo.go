@@ -109,28 +109,27 @@ type UserBet struct {
 }
 
 var (
-	currentGame                     string
-	currentVoiceSession             *discordgo.VoiceConnection
-	currentVoiceTimer               *time.Timer
-	gamelist                        []string
-	lastAuthorID                    string
-	lastMessage, lastCommandMessage discordgo.Message
-	lastQuoteIDs                    = make(map[string]int64)
-	ownUserID                       string
-	Rand                            = rand.New(rand.NewSource(time.Now().UnixNano()))
-	rouletteGuildID                 = ""
-	rouletteIsRed                   = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
-	rouletteBets                    []UserBet
-	rouletteTableValues             = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
-	rouletteWheelSpinning           = false
-	rouletteWheelValues             = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
-	startTime                       = time.Now()
-	sqlClient                       *sql.DB
-	typingTimer                     = make(map[string]*time.Timer)
-	userIDRegex                     = regexp.MustCompile(`<@(\d+?)>`)
-	userIDUpQuotes                  = make(map[string][]string)
-	voiceMutex                      sync.Mutex
-	voteTime                        = make(map[string]time.Time)
+	currentGame                       string
+	currentVoiceSession               *discordgo.VoiceConnection
+	currentVoiceTimer                 *time.Timer
+	gamelist                          []string
+	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
+	lastQuoteIDs                      = make(map[string]int64)
+	ownUserID                         string
+	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
+	rouletteGuildID                   = ""
+	rouletteIsRed                     = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
+	rouletteBets                      []UserBet
+	rouletteTableValues               = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
+	rouletteWheelSpinning             = false
+	rouletteWheelValues               = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
+	startTime                         = time.Now()
+	sqlClient                         *sql.DB
+	typingTimer                       = make(map[string]*time.Timer)
+	userIDRegex                       = regexp.MustCompile(`<@(\d+?)>`)
+	userIDUpQuotes                    = make(map[string][]string)
+	voiceMutex                        sync.Mutex
+	voteTime                          = make(map[string]time.Time)
 )
 
 func timeSinceStr(timeSince time.Duration) string {
@@ -227,6 +226,11 @@ func getGameTimesFromRows(rows *sql.Rows) (UserMessageLengths, time.Time, int, e
 			userGame[userID] = game
 			userTime[userID] = currTime
 		}
+	}
+	now := time.Now()
+	for userID, game := range userGame {
+		lastTime := userTime[userID]
+		gameTime[game] += now.Sub(lastTime).Hours()
 	}
 	gameTimes := make(UserMessageLengths, 0)
 	longestGameLength := 0
@@ -816,7 +820,9 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 }
 
 func deleteLastMessage(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	if lastAuthorID == authorID {
+	lastMessage, msgFound := lastMessages[authorID]
+	lastCommandMessage, cmdFound := lastCommandMessages[authorID]
+	if msgFound && cmdFound {
 		session.ChannelMessageDelete(lastMessage.ChannelID, lastMessage.ID)
 		session.ChannelMessageDelete(lastCommandMessage.ChannelID, lastCommandMessage.ID)
 		session.ChannelMessageDelete(chanID, messageID)
@@ -2596,9 +2602,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				if msgErr != nil {
 					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
 				} else {
-					lastCommandMessage = *m.Message
-					lastMessage = *message
-					lastAuthorID = m.Author.ID
+					lastCommandMessages[m.Author.ID] = *m.Message
+					lastMessages[m.Author.ID] = *message
 				}
 				fmt.Println("ERROR in " + command[0])
 				fmt.Printf("ARGS: %v\n", command[1:])
@@ -2619,9 +2624,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 						}
 					}
 				}
-				lastCommandMessage = *m.Message
-				lastMessage = *message
-				lastAuthorID = m.Author.ID
+				lastCommandMessages[m.Author.ID] = *m.Message
+				lastMessages[m.Author.ID] = *message
 			}
 			return
 		}
