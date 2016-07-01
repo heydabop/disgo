@@ -3030,7 +3030,7 @@ func giveAllowance() {
 		userIDs = append(userIDs, userID)
 	}
 	for i := range karmas {
-		_, err = sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", math.Min(3, 3+0.2*float64(karmas[i])), guildIDs[i], userIDs[i])
+		_, err = sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", math.Max(3, 3+0.2*float64(karmas[i])), guildIDs[i], userIDs[i])
 		if err != nil {
 			fmt.Println(err.Error())
 			return
