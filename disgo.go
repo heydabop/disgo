@@ -108,6 +108,11 @@ type UserBet struct {
 	Bet            float64
 }
 
+type DiscordError struct {
+	Code int `json:"code"`
+	Message string `json:"message"`
+}
+
 var (
 	currentGame                       string
 	currentVoiceSession               *discordgo.VoiceConnection
@@ -146,6 +151,28 @@ func timeSinceStr(timeSince time.Duration) string {
 		str = fmt.Sprintf("%.f days", timeSince.Hours()/24)
 	}
 	return str
+}
+
+func getUser(session *discordgo.Session, userID string) (user *discordgo.User, err error) {
+	user, err = session.User(userID)
+	if err != nil {
+		errStr := err.Error()
+		commaIndex := strings.Index(errStr, ",")
+		if (commaIndex != -1) {
+			jsonStr := errStr[commaIndex+1:]
+			var dErr DiscordError
+			jErr := json.Unmarshal([]byte(jsonStr), &dErr)
+			if jErr != nil {
+				fmt.Println(jErr.Error())
+				return
+			}
+			if (dErr.Code == 10013) {
+				user = &discordgo.User{ID: userID, Email: "", Username: "`<UNKNOWN>`", Avatar: "", Discriminator: "", Token: "", Verified: false, Bot: false}
+				err = nil
+			}
+		}
+	}
+	return
 }
 
 func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (string, error) {
@@ -502,7 +529,7 @@ func votes(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 	finalString := ""
 	for i, vote := range votes {
-		user, err := session.User(users[i])
+		user, err := getUser(session, users[i])
 		if err != nil {
 			return "", err
 		}
@@ -545,7 +572,7 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 	finalString := "(Those not listed have 10)\n"
 	for i, money := range monies {
-		user, err := session.User(users[i])
+		user, err := getUser(session, users[i])
 		if err != nil {
 			return "", err
 		}
@@ -639,7 +666,7 @@ func top(session *discordgo.Session, chanID, authorID, messageID string, args []
 	}
 	finalString := ""
 	for i, count := range counts {
-		user, err := session.User(users[i])
+		user, err := getUser(session, users[i])
 		if err != nil {
 			return "", err
 		}
@@ -690,7 +717,7 @@ func topLength(session *discordgo.Session, chanID, authorID, messageID string, a
 		if i >= limit {
 			break
 		}
-		user, err := session.User(length.AuthorID)
+		user, err := getUser(session, length.AuthorID)
 		if err != nil {
 			return "", err
 		}
@@ -723,7 +750,7 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 	}
 
 	if lockedMinutes == 0 || now.After(lastChangeTime.Add(time.Duration(lockedMinutes)*time.Minute)) {
-		self, err := session.User("@me")
+		self, err := getUser(session, "@me")
 		if err != nil {
 			return "", err
 		}
@@ -751,7 +778,7 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 		if err != nil {
 			return "", err
 		}
-		author, err := session.User(authorID)
+		author, err := getUser(session, authorID)
 		if err != nil {
 			return "", err
 		}
@@ -780,7 +807,7 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 			return "", err
 		}
 	}
-	user, err := session.User(userID)
+	user, err := getUser(session, userID)
 	if err != nil {
 		return "", err
 	}
@@ -865,7 +892,7 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 			return "", err
 		}
 	}
-	user, err := session.User(userID)
+	user, err := getUser(session, userID)
 	if err != nil {
 		return "", err
 	}
@@ -1131,7 +1158,7 @@ func topquote(session *discordgo.Session, chanID, authorID, messageID string, ar
 		}
 		authorName := `#` + channel.Name
 		if authorID.Valid {
-			author, err := session.User(authorID.String)
+			author, err := getUser(session, authorID.String)
 			if err != nil {
 				return "", err
 			}
@@ -1222,7 +1249,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 	output := make([]string, length)
 	for i := 0; i < length; i++ {
-		author, err := session.User(counts[i].AuthorID)
+		author, err := getUser(session, counts[i].AuthorID)
 		if err != nil {
 			return "", err
 		}
@@ -1357,7 +1384,7 @@ func meme(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if err != nil {
 		return "", err
 	}
-	op, err := session.User(opID)
+	op, err := getUser(session, opID)
 	if err != nil {
 		return "", err
 	}
@@ -1588,7 +1615,7 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 					return "", err
 				}
 			}
-			user, err = session.User(userID)
+			user, err = getUser(session, userID)
 			if err != nil {
 				return "", err
 			}
@@ -1690,7 +1717,7 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 					return "", err
 				}
 			}
-			user, err = session.User(userID)
+			user, err = getUser(session, userID)
 			if err != nil {
 				return "", err
 			}
@@ -1737,7 +1764,7 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 				return "", nil
 			}
 		}
-		user, err := session.User(userID)
+		user, err := getUser(session, userID)
 		if err != nil {
 			return "", nil
 		}
@@ -2254,7 +2281,7 @@ func topcommand(session *discordgo.Session, chanID, authorID, messageID string, 
 		if err != nil {
 			return "", err
 		}
-		user, err := session.User(userID)
+		user, err := getUser(session, userID)
 		if err != nil {
 			return "", err
 		}
@@ -2398,7 +2425,7 @@ func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string
 	avatarBase64 := base64.StdEncoding.EncodeToString(buf)
 	avatarBase64 = fmt.Sprintf("data:image/png;base64,%s", avatarBase64)
 
-	self, err := session.User("@me")
+	self, err := getUser(session, "@me")
 	if err != nil {
 		return "", err
 	}
@@ -2425,7 +2452,7 @@ func lastPlayed(session *discordgo.Session, chanID, authorID, messageID string, 
 			return "", err
 		}
 	}
-	user, err := session.User(userID)
+	user, err := getUser(session, userID)
 	if err != nil {
 		return "", err
 	}
@@ -2468,7 +2495,7 @@ func whois(session *discordgo.Session, chanID, authorID, messageID string, args 
 	if len(args) < 1 {
 		return "", nil
 	}
-	user, err := session.User(args[0])
+	user, err := getUser(session, args[0])
 	if err != nil {
 		return "", err
 	}
