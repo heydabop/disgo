@@ -109,8 +109,15 @@ type UserBet struct {
 }
 
 type DiscordError struct {
-	Code int `json:"code"`
+	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+type PokemonGoStatus struct {
+	GoOnline  bool `json:"go_online"`
+	GoIdle    int  `json:"go_idle"`
+	PtcOnline bool `json:"ptc_online"`
+	PtcIdle   int  `json:"ptc_idle"`
 }
 
 var (
@@ -158,7 +165,7 @@ func getUser(session *discordgo.Session, userID string) (user *discordgo.User, e
 	if err != nil {
 		errStr := err.Error()
 		commaIndex := strings.Index(errStr, ",")
-		if (commaIndex != -1) {
+		if commaIndex != -1 {
 			jsonStr := errStr[commaIndex+1:]
 			var dErr DiscordError
 			jErr := json.Unmarshal([]byte(jsonStr), &dErr)
@@ -166,7 +173,7 @@ func getUser(session *discordgo.Session, userID string) (user *discordgo.User, e
 				fmt.Println(jErr.Error())
 				return
 			}
-			if (dErr.Code == 10013) {
+			if dErr.Code == 10013 {
 				user = &discordgo.User{ID: userID, Email: "", Username: "`<UNKNOWN>`", Avatar: "", Discriminator: "", Token: "", Verified: false, Bot: false}
 				err = nil
 			}
@@ -2502,6 +2509,37 @@ func whois(session *discordgo.Session, chanID, authorID, messageID string, args 
 	return user.Username, nil
 }
 
+func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	res, err := http.Get(fmt.Sprintf("http://go.jooas.com/status"))
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	var status PokemonGoStatus
+	err = json.Unmarshal(body, &status)
+	if err != nil {
+		return "", err
+	}
+	goStatus := "Online"
+	ptcStatus := "Online"
+	if !status.GoOnline {
+		goStatus = "Offline"
+	}
+	if !status.PtcOnline {
+		ptcStatus = "Offline"
+	}
+	goDurationStr := timeSinceStr(time.Duration(status.GoIdle) * time.Minute)
+	ptcDurationStr := timeSinceStr(time.Duration(status.PtcIdle) * time.Minute)
+	return fmt.Sprintf("Pokémon Go: %s for %s\nPTC Login: %s for %s", goStatus, goDurationStr, ptcStatus, ptcDurationStr), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2532,6 +2570,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **money** [number (optional)] - displays top <number> users and their money
 **ping** - displays ping to discordapp.com
 **playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
+**pokemongo** - displays Pokémon Go server and Pokémon Trainer Club login statuses
 **recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration`)
 	if err != nil {
 		return "", err
@@ -2634,6 +2673,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"updateavatar":   Command(updateAvatar),
 		"lastplayed":     Command(lastPlayed),
 		"whois":          Command(whois),
+		"pokemongo":      Command(pokemongo),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
