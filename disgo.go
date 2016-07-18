@@ -126,6 +126,7 @@ var (
 	currentVoiceTimer                 *time.Timer
 	gamelist                          []string
 	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
+	lastPokemonGoStatus               = true
 	lastQuoteIDs                      = make(map[string]int64)
 	ownUserID                         string
 	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -335,6 +336,40 @@ func gambleChannelCheck(guildID, chanID string) error {
 		return nil
 	}
 	return errors.New("")
+}
+
+func checkPokemonGo() (status PokemonGoStatus, err error) {
+	res, err := http.Get(fmt.Sprintf("http://go.jooas.com/status"))
+	if err != nil {
+		return status, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return status, errors.New(res.Status)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return status, err
+	}
+	err = json.Unmarshal(body, &status)
+	if err != nil {
+		return status, err
+	}
+	return status, nil
+}
+
+func makePokemonGoStatusString(status PokemonGoStatus) string {
+	goStatus := "Online"
+	ptcStatus := "Online"
+	if !status.GoOnline {
+		goStatus = "Offline"
+	}
+	if !status.PtcOnline {
+		ptcStatus = "Offline"
+	}
+	goDurationStr := timeSinceStr(time.Duration(status.GoIdle) * time.Minute)
+	ptcDurationStr := timeSinceStr(time.Duration(status.PtcIdle) * time.Minute)
+	return fmt.Sprintf("Pokémon Go: %s for %s\nPTC Login: %s for %s", goStatus, goDurationStr, ptcStatus, ptcDurationStr)
 }
 
 func spam(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2510,34 +2545,11 @@ func whois(session *discordgo.Session, chanID, authorID, messageID string, args 
 }
 
 func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	res, err := http.Get(fmt.Sprintf("http://go.jooas.com/status"))
+	status, err := checkPokemonGo()
 	if err != nil {
 		return "", err
 	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var status PokemonGoStatus
-	err = json.Unmarshal(body, &status)
-	if err != nil {
-		return "", err
-	}
-	goStatus := "Online"
-	ptcStatus := "Online"
-	if !status.GoOnline {
-		goStatus = "Offline"
-	}
-	if !status.PtcOnline {
-		ptcStatus = "Offline"
-	}
-	goDurationStr := timeSinceStr(time.Duration(status.GoIdle) * time.Minute)
-	ptcDurationStr := timeSinceStr(time.Duration(status.PtcIdle) * time.Minute)
-	return fmt.Sprintf("Pokémon Go: %s for %s\nPTC Login: %s for %s", goStatus, goDurationStr, ptcStatus, ptcDurationStr), nil
+	return makePokemonGoStatusString(status), nil
 }
 
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3105,6 +3117,21 @@ func giveAllowance() {
 	}
 }
 
+func updatePokemonGoStatus(session *discordgo.Session) {
+	time.AfterFunc(time.Minute*5, func() { updatePokemonGoStatus(session) })
+	status, err := checkPokemonGo()
+	if err != nil {
+		return
+	}
+	if !lastPokemonGoStatus && status.GoOnline {
+		_, err = session.ChannelMessageSend(pokemonChanID, fmt.Sprintf("Pokémon Go Status Update:\n%s", makePokemonGoStatusString(status)))
+		if err != nil {
+			fmt.Println("ERROR SENDING POKEMON GO STATUS:", err.Error())
+		}
+	}
+	lastPokemonGoStatus = status.GoOnline
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -3242,6 +3269,8 @@ func main() {
 	now = time.Now()
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
+
+	go updatePokemonGoStatus(client)
 
 	select {}
 }
