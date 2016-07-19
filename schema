@@ -8,3 +8,4 @@ CREATE TABLE VoiceState(Id integer primary key autoincrement, GuildId varchar(30
 CREATE TABLE UserMoney(GuildId varchar(30), UserId varchar(30), Money real, unique(GuildId, UserId));
 CREATE TABLE UserKarma(GuildId varchar(30), UserId varchar(30), Karma integer, unique(GuildId, UserId));
 CREATE TABLE MessageDelete(MessageId unsigned big int primary key, foreign key(MessageId) references Message(Id));
+CREATE TABLE PokemonGoStatusUserSubscriptions(UserId varchar(30) primary key);

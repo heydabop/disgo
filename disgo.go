@@ -2552,6 +2552,28 @@ func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, a
 	return makePokemonGoStatusString(status), nil
 }
 
+func sub(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	if chanID != pokemonChanID {
+		return "", nil
+	}
+	_, err := sqlClient.Exec("INSERT INTO PokemonGoStatusUserSubscriptions(UserId) VALUES (?)", authorID)
+	if err != nil {
+		return "", err
+	}
+	return "I'll @mention you when I notice the Pokémon Go servers come online after being offline", nil
+}
+
+func unsub(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	if chanID != pokemonChanID {
+		return "", nil
+	}
+	_, err := sqlClient.Exec("DELETE FROM PokemonGoStatusUserSubscriptions WHERE UserId =?", authorID)
+	if err != nil {
+		return "", err
+	}
+	return "I won't @mention you about Pokémon Go servers", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2686,6 +2708,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"lastplayed":     Command(lastPlayed),
 		"whois":          Command(whois),
 		"pokemongo":      Command(pokemongo),
+		"sub":            Command(sub),
+		"unsub":          Command(unsub),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -3124,7 +3148,22 @@ func updatePokemonGoStatus(session *discordgo.Session) {
 		return
 	}
 	if !lastPokemonGoStatus && status.GoOnline {
-		_, err = session.ChannelMessageSend(pokemonChanID, fmt.Sprintf("Pokémon Go Status Update:\n%s", makePokemonGoStatusString(status)))
+		userMentions := ""
+		rows, err := sqlClient.Query("SELECT UserId FROM PokemonGoStatusUserSubscriptions")
+		if err == nil {
+			for rows.Next() {
+				var userID string
+				err := rows.Scan(&userID)
+				if err != nil {
+					fmt.Println("ERROR GETTING SUB USER", err)
+					continue
+				}
+				userMentions += fmt.Sprintf("<@%s> ", userID)
+			}
+		} else {
+			fmt.Println("ERROR GETTING SUBBED USERS", err)
+		}
+		_, err = session.ChannelMessageSend(pokemonChanID, fmt.Sprintf("%s Pokémon Go Status Update:\n%s", userMentions, makePokemonGoStatusString(status)))
 		if err != nil {
 			fmt.Println("ERROR SENDING POKEMON GO STATUS:", err.Error())
 		}
