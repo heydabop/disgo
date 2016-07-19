@@ -2045,8 +2045,7 @@ Split - split <number> <number> - on 1 of the 2 adjacent numbers - /bet 0.7 spli
 Street - street <number> - on 1 of the numbers in same row as given number - /bet 0.4 street 13
 Corner - corner <number> <number> <number> <number> - on one of 4 given adjacent numbers - /bet 1 corner 25 26 28 29
 Six Line - six <number> <number> - on one of 6 numbers from adjacent rows in which the 2 given numbers lie - /bet 1.5 six 13 16
-Trio - trio <number> <number> - on 0 and one of the pairs 1, 2 or 2, 3- /bet 1.2 trio 1 2
-Basket - basket - on 0, 1, or 2`+"```"+`
+Trio - trio <number> <number> - on 0 and one of the pairs 1, 2 or 2, 3- /bet 1.2 trio 1 2`+"```"+`
 Outside
 `+"```"+`Low - low - on 1-18
 High - high - on 19-36
@@ -2191,12 +2190,6 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		spaces = append(spaces, 0)
 		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
-	case "basket":
-		bet, _, err = getBetDetails(guild.ID, authorID, betArgs, 0)
-		if err != nil {
-			return "", err
-		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, []int{0, 1, 2}, 11, bet})
 	case "low":
 		bet, _, err = getBetDetails(guild.ID, authorID, betArgs, 0)
 		if err != nil {
@@ -2594,7 +2587,7 @@ func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, a
 	if !ptcOnline {
 		ptcStatus = "✘ Offline"
 	}
-	return fmt.Sprintf("Pokémon Go Uptime\n```Last 24 Hours: %.0f%%\n    Last Hour: %.0f%%\n   Pokémon Go: %s\n    PTC Login: %s```Last Update %s ago", 100*(float64(dayGoOnlineCount)/float64(dayCount)), 100*(float64(hourGoOnlineCount)/float64(hourCount)), goStatus, ptcStatus, timeSince), nil
+	return fmt.Sprintf("Pokémon Go Uptime\n```Last 24 Hours: %.0f%% (%d/%d)\n    Last Hour: %.0f%% (%d/%d)\n   Pokémon Go: %s\n    PTC Login: %s```Last Update %s ago", 100*(float64(dayGoOnlineCount)/float64(dayCount)), dayGoOnlineCount, dayCount, 100*(float64(hourGoOnlineCount)/float64(hourCount)), hourGoOnlineCount, hourCount, goStatus, ptcStatus, timeSince), nil
 }
 
 func sub(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3190,13 +3183,16 @@ func updatePokemonGoStatus(session *discordgo.Session) {
 	time.AfterFunc(time.Minute*1, func() { updatePokemonGoStatus(session) })
 	status, err := checkPokemonGo()
 	if err != nil {
+		fmt.Println("ERROR GETTING POKEMON STATUS", err.Error())
 		return
 	}
 	_, err = sqlClient.Exec("INSERT INTO PokemonGoStatus(GoOnline, PtcOnline, Timestamp) VALUES (?, ?, ?)", status.GoOnline, status.PtcOnline, time.Now().Format(time.RFC3339Nano))
 	if err != nil {
 		fmt.Println("ERROR INSERTING INTO PokemonGoStatus", err.Error())
 	}
-	if !lastPokemonGoStatus && status.GoOnline {
+	tempLastStatus := lastPokemonGoStatus
+	lastPokemonGoStatus = status.GoOnline
+	if !tempLastStatus && status.GoOnline {
 		userMentions := ""
 		rows, err := sqlClient.Query("SELECT UserId FROM PokemonGoStatusUserSubscriptions")
 		if err == nil {
@@ -3225,7 +3221,6 @@ func updatePokemonGoStatus(session *discordgo.Session) {
 			fmt.Println("ERROR SENDING POKEMON GO STATUS:", err.Error())
 		}
 	}
-	lastPokemonGoStatus = status.GoOnline
 }
 
 func main() {
