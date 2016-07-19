@@ -1184,6 +1184,7 @@ func topquote(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
+	defer rows.Close()
 	channel, err := session.State.Channel(chanID)
 	if err != nil {
 		return "", err
@@ -2545,11 +2546,55 @@ func whois(session *discordgo.Session, chanID, authorID, messageID string, args 
 }
 
 func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	status, err := checkPokemonGo()
+	now := time.Now()
+	dayAgo := now.Add(-24 * time.Hour)
+	hourAgo := now.Add(-1 * time.Hour)
+	rows, err := sqlClient.Query("SELECT GoOnline, Timestamp FROM PokemonGoStatus WHERE Timestamp >= ? ORDER BY Timestamp ASC", dayAgo)
 	if err != nil {
 		return "", err
 	}
-	return makePokemonGoStatusString(status), nil
+	var dayCount, dayGoOnlineCount, hourCount, hourGoOnlineCount uint64
+	defer rows.Close()
+	var goOnline, ptcOnline bool
+	var timestamp string
+	for rows.Next() {
+		err := rows.Scan(&goOnline, &timestamp)
+		if err != nil {
+			return "", err
+		}
+		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			return "", err
+		}
+		dayCount++
+		if goOnline {
+			dayGoOnlineCount++
+		}
+		if currTime.After(hourAgo) {
+			hourCount++
+			if goOnline {
+				hourGoOnlineCount++
+			}
+		}
+	}
+	err = sqlClient.QueryRow("SELECT GoOnline, PtcOnline, Timestamp FROM PokemonGoStatus ORDER BY Timestamp DESC LIMIT 1").Scan(&goOnline, &ptcOnline, &timestamp)
+	if err != nil {
+		return "", err
+	}
+	updateTime, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		return "", err
+	}
+	timeSince := timeSinceStr(time.Now().Sub(updateTime))
+	goStatus := "✔ Online"
+	ptcStatus := "✔ Online"
+	if !goOnline {
+		goStatus = "✘ Offline"
+	}
+	if !ptcOnline {
+		ptcStatus = "✘ Offline"
+	}
+	return fmt.Sprintf("Pokémon Go Uptime\n```Last 24 Hours: %.0f%%\n    Last Hour: %.0f%%\n   Pokémon Go: %s\n    PTC Login: %s```Last Update %s ago", 100*(float64(dayGoOnlineCount)/float64(dayCount)), 100*(float64(hourGoOnlineCount)/float64(hourCount)), goStatus, ptcStatus, timeSince), nil
 }
 
 func sub(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2560,14 +2605,14 @@ func sub(session *discordgo.Session, chanID, authorID, messageID string, args []
 	if err != nil {
 		return "", err
 	}
-	return "I'll @mention you when I notice the Pokémon Go servers come online after being offline", nil
+	return "I'll @mention you the next time I notice the Pokémon Go servers come online after being offline", nil
 }
 
 func unsub(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	if chanID != pokemonChanID {
 		return "", nil
 	}
-	_, err := sqlClient.Exec("DELETE FROM PokemonGoStatusUserSubscriptions WHERE UserId =?", authorID)
+	_, err := sqlClient.Exec("DELETE FROM PokemonGoStatusUserSubscriptions WHERE UserId = ?", authorID)
 	if err != nil {
 		return "", err
 	}
@@ -3142,26 +3187,38 @@ func giveAllowance() {
 }
 
 func updatePokemonGoStatus(session *discordgo.Session) {
-	time.AfterFunc(time.Minute*5, func() { updatePokemonGoStatus(session) })
+	time.AfterFunc(time.Minute*1, func() { updatePokemonGoStatus(session) })
 	status, err := checkPokemonGo()
 	if err != nil {
 		return
+	}
+	_, err = sqlClient.Exec("INSERT INTO PokemonGoStatus(GoOnline, PtcOnline, Timestamp) VALUES (?, ?, ?)", status.GoOnline, status.PtcOnline, time.Now().Format(time.RFC3339Nano))
+	if err != nil {
+		fmt.Println("ERROR INSERTING INTO PokemonGoStatus", err.Error())
 	}
 	if !lastPokemonGoStatus && status.GoOnline {
 		userMentions := ""
 		rows, err := sqlClient.Query("SELECT UserId FROM PokemonGoStatusUserSubscriptions")
 		if err == nil {
+			defer rows.Close()
 			for rows.Next() {
 				var userID string
 				err := rows.Scan(&userID)
 				if err != nil {
-					fmt.Println("ERROR GETTING SUB USER", err)
+					fmt.Println("ERROR GETTING SUB USER", err.Error())
 					continue
 				}
 				userMentions += fmt.Sprintf("<@%s> ", userID)
 			}
+			if len(userMentions) < 1 {
+				return
+			}
 		} else {
-			fmt.Println("ERROR GETTING SUBBED USERS", err)
+			fmt.Println("ERROR GETTING SUBBED USERS", err.Error())
+		}
+		_, err = sqlClient.Exec("DELETE FROM PokemonGoStatusUserSubscriptions")
+		if err != nil {
+			fmt.Println("ERROR DELETING FROM PokemonGoStatusUserSubscriptions", err.Error())
 		}
 		_, err = session.ChannelMessageSend(pokemonChanID, fmt.Sprintf("%s Pokémon Go Status Update:\n%s", userMentions, makePokemonGoStatusString(status)))
 		if err != nil {
@@ -3289,10 +3346,12 @@ func main() {
 		err := rows.Scan(&chanID, &authorID, &timeStr, &content)
 		if err != nil {
 			fmt.Println("ERROR setting reminder", err)
+			continue
 		}
 		reminderTime, err := time.Parse(time.RFC3339, timeStr)
 		if err != nil {
 			fmt.Println("ERROR getting reminder time", err)
+			continue
 		}
 		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
 	}
@@ -3309,7 +3368,7 @@ func main() {
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
-	go updatePokemonGoStatus(client)
+	time.AfterFunc(time.Minute*1, func() { updatePokemonGoStatus(client) })
 
 	select {}
 }
