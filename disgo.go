@@ -3372,5 +3372,7 @@ func main() {
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
+	time.AfterFunc(time.Minute*1, func() { updatePokemonGoStatus(client) })
+
 	select {}
 }
