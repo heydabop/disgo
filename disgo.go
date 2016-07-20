@@ -120,6 +120,13 @@ type PokemonGoStatus struct {
 	PtcIdle   int  `json:"ptc_idle"`
 }
 
+type PokemonGoGraphDatapoint struct {
+	Unixtime int64 `json:"unixtime"`
+	Avg24Hour float64 `json:"avg24Hour"`
+	Avg1Hour float64 `json:"avg1Hour"`
+	Avg30Min float64 `json:"avg30Min"`
+}
+
 var (
 	currentGame                       string
 	currentVoiceSession               *discordgo.VoiceConnection
@@ -2542,7 +2549,7 @@ func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, a
 	now := time.Now()
 	dayAgo := now.Add(-24 * time.Hour)
 	hourAgo := now.Add(-1 * time.Hour)
-	rows, err := sqlClient.Query("SELECT GoOnline, Timestamp FROM PokemonGoStatus WHERE Timestamp >= ? ORDER BY Timestamp ASC", dayAgo)
+	rows, err := sqlClient.Query("SELECT GoOnline, Timestamp FROM PokemonGoStatus WHERE Timestamp >= ? ORDER BY Timestamp ASC", dayAgo.Format(time.RFC3339Nano))
 	if err != nil {
 		return "", err
 	}
@@ -3011,8 +3018,9 @@ func handleGuildMemberAdd(s *discordgo.Session, m *discordgo.GuildMemberAdd) {
 		return
 	}
 	for _, channel := range guild.Channels {
-		if channel.ID != minecraftChanID {
-			s.ChannelMessageSend(channel.ID, fmt.Sprintf("*%s has joined*", m.User.Username))
+		_, err := s.ChannelMessageSend(channel.ID, fmt.Sprintf("*%s has joined*", m.User.Username))
+		if err == nil {
+			break
 		}
 	}
 }
@@ -3024,8 +3032,9 @@ func handleGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMemberRemov
 		return
 	}
 	for _, channel := range guild.Channels {
-		if channel.ID != minecraftChanID {
-			s.ChannelMessageSend(channel.ID, fmt.Sprintf("*%s has left*", m.User.Username))
+		_, err := s.ChannelMessageSend(channel.ID, fmt.Sprintf("*%s has left*", m.User.Username))
+		if err == nil {
+			break
 		}
 	}
 }
@@ -3223,6 +3232,69 @@ func updatePokemonGoStatus(session *discordgo.Session) {
 	}
 }
 
+func handleHttpPokemonGoReq(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	/*twoDaysAgo := now.Add(-48 * time.Hour)
+	rows, err := sqlClient.Query("SELECT GoOnline, Timestamp FROM PokemonGoStatus WHERE Timestamp >= ? ORDER BY Timestamp ASC", twoDaysAgo.Format(time.RFC3339Nano))
+	if err != nil {
+		fmt.Println("ERROR HANDLING HTTP REQ", err.Error())
+		http.Error(w, "Server Error", 500)
+	}
+	defer rows.Close()
+	var unixtimes []int64
+	goOnlines := make(map[int64]bit)
+	for rows.Next() {
+		var timestamp string
+		var goOnline bit
+		err := rows.Scan(&goOnline, &timestamp)
+		if err != nil {
+			fmt.Println("ERROR SCANNING DB ROW", err.Error())
+			http.Error(w, "Server Error", 500)
+		}
+		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		if err != nil {
+			fmt.Println("ERROR PARSING TIME", err.Error())
+			http.Error(w, "Server Error", 500)
+		}
+		unixtimeSec := currTime.Unix()
+		unixtimes = append(unixtimes, unixtimeSec)
+		goOnlines[unixtimeSec] = goOnline
+	}
+	datapoints := make([]PokemonGoGraphDatapoint, len(unixtimes))
+	dayAgoUnix := now.Add(-24 * time.Hour).Unix()
+	for _, unixtime := range unixtimes {
+	}*/
+	dayAgo := now.Add(-24 * time.Hour)
+	datapoints := make([]PokemonGoGraphDatapoint, 0, int(now.Sub(dayAgo).Minutes()))
+	for datapointTime := dayAgo; datapointTime.Before(now); datapointTime = datapointTime.Add(2*time.Minute) {
+		var nullAvg24Hour, nullAvg1Hour, nullAvg30Min sql.NullFloat64
+		timestamp := datapointTime.Format(time.RFC3339Nano)
+		err := sqlClient.QueryRow("SELECT (SELECT AVG(GoOnline) FROM PokemonGoStatus WHERE Timestamp > ? AND Timestamp < ?), (SELECT AVG(GoOnline) FROM PokemonGoStatus WHERE Timestamp > ? AND Timestamp < ?), (SELECT AVG(GoOnline) FROM PokemonGoStatus WHERE Timestamp > ? AND Timestamp < ?)",
+			datapointTime.Add(-24*time.Hour).Format(time.RFC3339Nano), timestamp,
+			datapointTime.Add(-time.Hour).Format(time.RFC3339Nano), timestamp,
+			datapointTime.Add(-30*time.Minute).Format(time.RFC3339Nano), timestamp).Scan(&nullAvg24Hour, &nullAvg1Hour, &nullAvg30Min)
+		if err != nil {
+			fmt.Println("ERROR SCANNING DB", err.Error())
+			http.Error(w, "Server Error", 500)
+			return
+		}
+		var avg24Hour, avg1Hour, avg30Min float64
+		if nullAvg24Hour.Valid {
+			avg24Hour = nullAvg24Hour.Float64
+		}
+		if nullAvg1Hour.Valid {
+			avg1Hour = nullAvg1Hour.Float64
+		}
+		if nullAvg30Min.Valid {
+			avg30Min = nullAvg30Min.Float64
+		}
+		unixtime := datapointTime.Unix()
+		datapoints = append(datapoints, PokemonGoGraphDatapoint{Unixtime: unixtime*1000, Avg24Hour: avg24Hour, Avg1Hour: avg1Hour, Avg30Min: avg30Min})
+	}
+	encoder := json.NewEncoder(w)
+	encoder.Encode(datapoints)
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -3364,6 +3436,14 @@ func main() {
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
 	time.AfterFunc(time.Minute*1, func() { updatePokemonGoStatus(client) })
+
+	http.HandleFunc("/", handleHttpPokemonGoReq)
+	go func(){
+		err := http.ListenAndServe(":8082", nil)
+		if err != nil {
+			fmt.Println("ERROR LISTENING ON 8082", err.Error())
+		}
+	}()
 
 	select {}
 }
