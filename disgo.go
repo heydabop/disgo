@@ -381,7 +381,7 @@ func makePokemonGoStatusString(status PokemonGoStatus) string {
 }
 
 func getMarkovFilelist(name string) (files []string, err error) {
-	cmd := exec.Command("find", "-iname", name + "_nolink")
+	cmd := exec.Command("find", "-iname", name+"_nolink")
 	cmd.Dir = "/home/ross/markov/"
 	out, err := cmd.Output()
 	if err != nil {
