@@ -2671,9 +2671,15 @@ func starbound(session *discordgo.Session, chanID, authorID, messageID string, a
 	for _, line := range strings.Split(packet.Body, "\n") {
 		start := strings.Index(line, " : ")
 		end := strings.LastIndex(line, " : $$")
-		usernames = append(usernames, line[start+3:end])
+		if start != -1 && end != -1 {
+			usernames = append(usernames, line[start+3:end])
+		}
 	}
-	return fmt.Sprintf("%s:%d\n[%d Online] — %s", starboundServer, starboundPort, len(usernames), strings.Join(usernames, ", ")), nil
+	onlineStr := "[0 Online]"
+	if len(usernames) > 0 {
+		onlineStr = fmt.Sprintf("[%d Online] — %s", len(usernames), strings.Join(usernames, ", "))
+	}
+	return fmt.Sprintf("%s:%d\n%s", starboundServer, starboundPort, onlineStr), nil
 }
 
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
