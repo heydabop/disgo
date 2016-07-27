@@ -12,8 +12,9 @@ import (
 	"github.com/Craftserve/mcstatus"
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
+	"github.com/chuckpreslar/rcon"
 	"github.com/gyuho/goling/similar"
-	"github.com/james4k/rcon"
+	mcrcon "github.com/james4k/rcon"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -379,15 +380,24 @@ func makePokemonGoStatusString(status PokemonGoStatus) string {
 	return fmt.Sprintf("Pokémon Go: %s for %s\nPTC Login: %s for %s", goStatus, goDurationStr, ptcStatus, ptcDurationStr)
 }
 
+func getMarkovFilelist(name string) (files []string, err error) {
+	cmd := exec.Command("find", "-iname", name + "_nolink")
+	cmd.Dir = "/home/ross/markov/"
+	out, err := cmd.Output()
+	if err != nil {
+		return
+	}
+	files = strings.Fields(string(out))
+	return
+}
+
 func spam(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	filename := ""
 	if len(args) < 1 {
-		cmd := exec.Command("find", "-iname", "*_nolink")
-		cmd.Dir = "/home/ross/markov/"
-		out, err := cmd.Output()
+		files, err := getMarkovFilelist("*")
 		if err != nil {
 			return "", err
 		}
-		files := strings.Fields(string(out))
 		for i := range files {
 			files[i] = strings.Replace(files[i], "./", "", 1)
 			files[i] = strings.Replace(files[i], "_nolink", "", 1)
@@ -395,8 +405,33 @@ func spam(session *discordgo.Session, chanID, authorID, messageID string, args [
 		sort.Strings(files)
 		return strings.Join(files, ", "), nil
 	}
+	files, err := getMarkovFilelist(args[0])
+	if err != nil {
+		return "", err
+	}
+	if len(files) < 1 {
+		files, err := getMarkovFilelist("*" + args[0] + "*")
+		if err != nil {
+			return "", err
+		}
+		switch len(files) {
+		case 0:
+			return "", errors.New("No logs found for " + args[0])
+		case 1:
+			filename = files[0]
+		default:
+			for i := range files {
+				files[i] = strings.Replace(files[i], "./", "", 1)
+				files[i] = strings.Replace(files[i], "_nolink", "", 1)
+			}
+			sort.Strings(files)
+			return "Did you mean one of the following: " + strings.Join(files, ", "), nil
+		}
+	} else {
+		filename = files[0]
+	}
 	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
-	logs, err := os.Open("/home/ross/markov/" + args[0] + "_nolink")
+	logs, err := os.Open("/home/ross/markov/" + filename)
 	if err != nil {
 		return "", err
 	}
@@ -405,7 +440,7 @@ func spam(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
+	return fmt.Sprintf("%s:\n%s", filename[2:len(filename)-7], strings.TrimSpace(string(out))), nil
 }
 
 func changeMoney(guildID, userID string, value float64) error {
@@ -2594,7 +2629,7 @@ func pokemongo(session *discordgo.Session, chanID, authorID, messageID string, a
 	if !ptcOnline {
 		ptcStatus = "✘ Offline"
 	}
-	return fmt.Sprintf("Pokémon Go Uptime\n```Last 24 Hours: %.0f%% (%d/%d)\n    Last Hour: %.0f%% (%d/%d)\n   Pokémon Go: %s\n    PTC Login: %s```Last Update %s ago", 100*(float64(dayGoOnlineCount)/float64(dayCount)), dayGoOnlineCount, dayCount, 100*(float64(hourGoOnlineCount)/float64(hourCount)), hourGoOnlineCount, hourCount, goStatus, ptcStatus, timeSince), nil
+	return fmt.Sprintf("Pokémon Go Uptime\n```Last 24 Hours: %.0f%% (%d/%d)\n    Last Hour: %.0f%% (%d/%d)\n   Pokémon Go: %s\n    PTC Login: %s```\nLast Update %s ago\nhttp://anex.us/pokemongo/", 100*(float64(dayGoOnlineCount)/float64(dayCount)), dayGoOnlineCount, dayCount, 100*(float64(hourGoOnlineCount)/float64(hourCount)), hourGoOnlineCount, hourCount, goStatus, ptcStatus, timeSince), nil
 }
 
 func sub(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2617,6 +2652,28 @@ func unsub(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", err
 	}
 	return "I won't @mention you about Pokémon Go servers", nil
+}
+
+func starbound(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	client, err := rcon.NewClient("127.0.0.1", sbrconPort)
+	if err != nil {
+		return "", err
+	}
+	packet, err := client.Authorize(sbrconPass)
+	if err != nil {
+		return "", err
+	}
+	packet, err = client.Execute("list")
+	if err != nil {
+		return "", err
+	}
+	var usernames []string
+	for _, line := range strings.Split(packet.Body, "\n") {
+		start := strings.Index(line, " : ")
+		end := strings.LastIndex(line, " : $$")
+		usernames = append(usernames, line[start+3:end])
+	}
+	return fmt.Sprintf("%s:%d\n[%d Online] — %s", starboundServer, starboundPort, len(usernames), strings.Join(usernames, ", ")), nil
 }
 
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2755,6 +2812,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"pokemongo":      Command(pokemongo),
 		"sub":            Command(sub),
 		"unsub":          Command(unsub),
+		"starbound":      Command(starbound),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -2842,7 +2900,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 					username = m.Author.Username
 				}
 			}
-			conn, err := rcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
+			conn, err := mcrcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
 			if err == nil {
 				_, err := conn.Write(fmt.Sprintf("say %s> %s", username, m.Content))
 				if err != nil {
