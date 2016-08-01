@@ -2748,6 +2748,23 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 	return "", nil
 }
 
+func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
+	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	if err != nil {
+		return
+	}
+	if perm&0x2000 == 0x2000 {
+		image, err := os.Open("kappa.png")
+		if err != nil {
+			return
+		}
+		_, err = session.ChannelFileSend(chanID, "kappa.png", image)
+		if err == nil {
+			session.ChannelMessageDelete(chanID, messageID)
+		}
+	}
+}
+
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + ownUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
@@ -2757,6 +2774,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
 	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
+	kappaRegex := regexp.MustCompile(`(?i)\s*kappa\s*`)
 	funcMap := map[string]Command{
 		"spam":           Command(spam),
 		"soda":           Command(soda),
@@ -2947,6 +2965,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		}
 		if match := twitchRegex.FindStringSubmatch(m.Content); match != nil {
 			executeCommand(s, m, []string{"twitch", match[2]})
+			return
+		}
+		if match := kappaRegex.FindStringSubmatch(m.Content); match != nil {
+			kappa(s, m.ChannelID, m.Author.ID, m.ID)
 			return
 		}
 		/*if match := oddshotRegex.FindString(m.Content); match != "" {
