@@ -2682,6 +2682,58 @@ func starbound(session *discordgo.Session, chanID, authorID, messageID string, a
 	return fmt.Sprintf("%s:%d\n%s", starboundServer, starboundPort, onlineStr), nil
 }
 
+func permission(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	if err != nil {
+		return "", nil
+	}
+	fmt.Printf("%X\n", perm)
+	session.ChannelMessageDelete(chanID, messageID)
+	return "", nil
+}
+
+func voicekick(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	if !(channel.GuildID == "98470233999675392" && (authorID == "98468637962158080" || authorID == "98482369446543360")) {
+		return "", nil
+	}
+	if len(args) < 1 {
+		return "", errors.New("No userID provided")
+	}
+	var userID string
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+
+	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	if err != nil {
+		return "", err
+	}
+	if perm&0x10 != 0x10 || perm&0x1000000 != 0x1000000 {
+		return "I can't do that", nil
+	}
+
+	newChanName := fmt.Sprintf("kick-%04d", Rand.Intn(10000))
+	newChan, err := session.GuildChannelCreate(channel.GuildID, newChanName, "voice")
+	if err != nil {
+		return "", err
+	}
+	err = session.GuildMemberMove(newChan.GuildID, userID, newChan.ID)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelDelete(newChan.ID)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2837,13 +2889,15 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"sub":            Command(sub),
 		"unsub":          Command(unsub),
 		"starbound":      Command(starbound),
+		"permission":     Command(permission),
+		"voicekick":      Command(voicekick),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
 	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
