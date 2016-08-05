@@ -942,7 +942,7 @@ func deleteLastMessage(session *discordgo.Session, chanID, authorID, messageID s
 }
 
 func kickme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
 		return "", err
 	}
@@ -2683,7 +2683,7 @@ func starbound(session *discordgo.Session, chanID, authorID, messageID string, a
 }
 
 func permission(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
 		return "", nil
 	}
@@ -2710,7 +2710,7 @@ func voicekick(session *discordgo.Session, chanID, authorID, messageID string, a
 		return "", errors.New("No valid mention found")
 	}
 
-	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
 		return "", err
 	}
@@ -2801,7 +2801,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 }
 
 func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
-	perm, err := session.UserChannelPermissions(ownUserID, chanID)
+	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
 		return
 	}
