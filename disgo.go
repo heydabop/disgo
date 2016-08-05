@@ -913,19 +913,26 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if online {
 		return fmt.Sprintf("%s is currently online", user.Username), nil
 	}
-	lastOnlineStr := ""
-	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and (Presence = 'offline' or Presence = 'idle') order by Timestamp desc limit 1", guild.ID, userID).Scan(&lastOnlineStr)
+	var lastOnlineStr, offlineStr string
+	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and Presence = 'online' order by Timestamp desc limit 1", guild.ID, userID).Scan(&lastOnlineStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("%s was last seen at least %.f days ago", user.Username, time.Since(time.Date(2016, 4, 7, 1, 7, 0, 0, time.Local)).Hours()/24), nil
 		}
 		return "", err
 	}
-	lastOnline, err := time.Parse(time.RFC3339Nano, lastOnlineStr)
+	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and Presence != 'online' and Timestamp > ? order by Timestamp asc limit 1", guild.ID, userID, lastOnlineStr).Scan(&offlineStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Sprintf("%s is currently online", user.Username), nil
+		}
+		return "", err
+	}
+	offline, err := time.Parse(time.RFC3339Nano, offlineStr)
 	if err != nil {
 		return "", err
 	}
-	timeSince := time.Since(lastOnline)
+	timeSince := time.Since(offline)
 	lastSeenStr := timeSinceStr(timeSince)
 	return fmt.Sprintf("%s was last seen %s ago", user.Username, lastSeenStr), nil
 }
