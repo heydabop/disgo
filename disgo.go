@@ -133,6 +133,7 @@ var (
 	currentVoiceSession               *discordgo.VoiceConnection
 	currentVoiceTimer                 *time.Timer
 	gamelist                          []string
+	lastKappa                         = make(map[string]time.Time)
 	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
 	lastPokemonGoStatus               = true
 	lastQuoteIDs                      = make(map[string]int64)
@@ -2813,15 +2814,20 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 		return
 	}
 	if perm&0x2000 == 0x2000 {
-		image, err := os.Open("kappa.png")
-		if err != nil {
-			return
-		}
-		_, err = session.ChannelFileSend(chanID, "kappa.png", image)
-		if err == nil {
+		if lastTime, found := lastKappa[authorID]; !found || time.Now().Sub(lastTime) > 30*time.Second {
+			image, err := os.Open("kappa.png")
+			if err != nil {
+				return
+			}
+			_, err = session.ChannelFileSend(chanID, "kappa.png", image)
+			if err == nil {
+				session.ChannelMessageDelete(chanID, messageID)
+			}
+		} else {
 			session.ChannelMessageDelete(chanID, messageID)
 		}
 	}
+	lastKappa[authorID] = time.Now()
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
