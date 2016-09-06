@@ -2809,6 +2809,15 @@ func topOnline(session *discordgo.Session, chanID, authorID, messageID string, a
 	return fmt.Sprintf("The following %d users were online on %s\n%s", maxOnline, maxTime.Format("Jan _2, 2006"), strings.Join(onlineUsernames, ", ")), nil
 }
 
+func ooer(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	arg := []rune(strings.Join(args, " "))
+	var message []rune
+	for _, r := range arg {
+		message = append(message, r, rune(Rand.Intn(0x70)+0x300), rune(Rand.Intn(0x70)+0x300))
+	}
+	return string(message), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2837,14 +2846,15 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **math** [math stuff] - does math
 **meme** - random meme from channel history
 **money** [number (optional)] - displays top <number> users and their money
+**ooer** [message] - Ǫ̧̩͟͜H̝̼ ̡̳͖͑̇M̔́Aͤ̓Ńͮ ̛̔ͯ͌ͪĮ̷̒̀͠ ͦ͋̐̾͡Ḁ̶͗ͪ͡Mͧͪ ̧ͩN̴̫̳̚͢Ǫ͈̬̫̏T̢̟̭͎͈ ̷̳̜̦͆G̵͛O̿́O̯͇̎̋͝D͖̈ ̼̰W͙̦̿͞͝I̛̮̊ͦ̚T̘͑H̨͎̲̑͢ ̢̗͍̟̽C̀ͯ͊̀͡O̷͈ͯ͌ͅM̓̓P̢̬̋̃͊U̜̱̓͡͞T̀̇Ě̷R̈̎ ̨̭ͭ̿͠P̳ͯͩ̎͟Ľ̳͏̨̩Ž̯ ͇̜Ť̤̻͖͜O̤̲҉̑ͯ ͤ͊H̢̼̿͆ͥḀ̢̢ͮ̊L̫͈̳̪̀P̶̯͆̾͟
 **ping** - displays ping to discordapp.com
-**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
-**pokemongo** - displays Pokémon Go server and Pokémon Trainer Club login statuses
-**recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration`)
+**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>`)
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**remindme**
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**pokemongo** - displays Pokémon Go server and Pokémon Trainer Club login statuses
+**recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration
+**remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **reminders** - messages you your pending reminders
@@ -2971,6 +2981,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"permission":     Command(permission),
 		"voicekick":      Command(voicekick),
 		"toponline":      Command(topOnline),
+		"ooer":           Command(ooer),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
