@@ -1727,6 +1727,10 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
+	var totalTime float64
+	for _, gameTime := range gameTimes {
+		totalTime += gameTime.AvgLength
+	}
 
 	var message string
 	if user != nil {
@@ -1734,6 +1738,7 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	} else {
 		message = fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
 	}
+	message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", "All Games", totalTime)
 	for i := 0; i < limit && i < len(gameTimes); i++ {
 		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
 	}
@@ -1829,6 +1834,10 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 	if err != nil {
 		return "", err
 	}
+	var totalTime float64
+	for _, gameTime := range gameTimes {
+		totalTime += gameTime.AvgLength
+	}
 
 	var message string
 	if user != nil {
@@ -1836,6 +1845,7 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 	} else {
 		message = fmt.Sprintf("Since %s\n", startTime.Format(time.RFC1123Z))
 	}
+	message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", "All Games", totalTime)
 	for i := 0; i < limit && i < len(gameTimes); i++ {
 		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
 	}
