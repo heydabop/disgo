@@ -1158,6 +1158,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 		if currentVoiceSession.ChannelID == voiceChanID && currentVoiceSession.GuildID == guild.ID {
 			return "", nil
 		}
+		dgvoice.KillPlayer()
 		err = currentVoiceSession.Disconnect()
 		currentVoiceSession = nil
 		if err != nil {
@@ -1176,6 +1177,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 	}
 	currentVoiceTimer = time.AfterFunc(1*time.Minute, func() {
 		if currentVoiceSession != nil {
+			dgvoice.KillPlayer()
 			err := currentVoiceSession.Disconnect()
 			currentVoiceSession = nil
 			if err != nil {
@@ -1190,7 +1192,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(30)
+		suh := Rand.Intn(31)
 		if err != nil {
 			return "", err
 		}
@@ -2703,7 +2705,9 @@ func voicekick(session *discordgo.Session, chanID, authorID, messageID string, a
 	if err != nil {
 		return "", err
 	}
-	if !(channel.GuildID == "98470233999675392" && (authorID == "98468637962158080" || authorID == "98482369446543360")) {
+	_, inGuild := voicekickGuildIDs[channel.GuildID]
+	_, authorized := voicekickAuthorIDs[authorID]
+	if !(inGuild && authorized) {
 		return "", nil
 	}
 	if len(args) < 1 {
@@ -2734,6 +2738,41 @@ func voicekick(session *discordgo.Session, chanID, authorID, messageID string, a
 		return "", err
 	}
 	_, err = session.ChannelDelete(newChan.ID)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func timeout(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	_, inGuild := voicekickGuildIDs[channel.GuildID]
+	_, authorized := voicekickAuthorIDs[authorID]
+	if !(inGuild && authorized) {
+		return "", nil
+	}
+	if len(args) < 1 {
+		return "", errors.New("No userID provided")
+	}
+	var userID string
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+
+	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
+	if err != nil {
+		return "", err
+	}
+	if perm&0x1000000 != 0x1000000 {
+		return "I can't do that", nil
+	}
+
+	err = session.GuildMemberMove(channel.GuildID, userID, timeoutChanID)
 	if err != nil {
 		return "", err
 	}
@@ -2982,13 +3021,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"voicekick":      Command(voicekick),
 		"toponline":      Command(topOnline),
 		"ooer":           Command(ooer),
+		"timeout":        Command(timeout),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
 	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
@@ -3499,6 +3539,7 @@ func main() {
 		voiceMutex.Lock()
 		defer voiceMutex.Unlock()
 		if currentVoiceSession != nil {
+			dgvoice.KillPlayer()
 			err := currentVoiceSession.Disconnect()
 			if err != nil {
 				fmt.Println("ERROR leaving voice channel " + err.Error())
@@ -3553,6 +3594,7 @@ func main() {
 			voiceMutex.Lock()
 			defer voiceMutex.Unlock()
 			if currentVoiceSession != nil {
+				dgvoice.KillPlayer()
 				err := currentVoiceSession.Disconnect()
 				if err != nil {
 					fmt.Println("ERROR leaving voice channel " + err.Error())
