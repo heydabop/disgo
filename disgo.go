@@ -148,7 +148,7 @@ var (
 	startTime                         = time.Now()
 	sqlClient                         *sql.DB
 	typingTimer                       = make(map[string]*time.Timer)
-	userIDRegex                       = regexp.MustCompile(`<@(\d+?)>`)
+	userIDRegex                       = regexp.MustCompile(`<@!?(\d+?)>`)
 	userIDUpQuotes                    = make(map[string][]string)
 	voiceMutex                        sync.Mutex
 	voteTime                          = make(map[string]time.Time)
@@ -2876,8 +2876,11 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **downvote** [@user] - downvotes user
 **@[user]--** - downvotes user
 **forsen** - alias for /spam forsenlol
-**gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel
-**karma** [number (optional)] - displays top <number> users and their karma
+**gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel`)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**karma** [number (optional)] - displays top <number> users and their karma
 **lastplayed** [username] - displays game last played by <username>
 **lastseen** [username] - displays when <username> was last seen
 **lastmessage** [username] - displays when <username> last sent a message
@@ -2887,19 +2890,19 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **money** [number (optional)] - displays top <number> users and their money
 **ooer** [message] - Ǫ̧̩͟͜H̝̼ ̡̳͖͑̇M̔́Aͤ̓Ńͮ ̛̔ͯ͌ͪĮ̷̒̀͠ ͦ͋̐̾͡Ḁ̶͗ͪ͡Mͧͪ ̧ͩN̴̫̳̚͢Ǫ͈̬̫̏T̢̟̭͎͈ ̷̳̜̦͆G̵͛O̿́O̯͇̎̋͝D͖̈ ̼̰W͙̦̿͞͝I̛̮̊ͦ̚T̘͑H̨͎̲̑͢ ̢̗͍̟̽C̀ͯ͊̀͡O̷͈ͯ͌ͅM̓̓P̢̬̋̃͊U̜̱̓͡͞T̀̇Ě̷R̈̎ ̨̭ͭ̿͠P̳ͯͩ̎͟Ľ̳͏̨̩Ž̯ ͇̜Ť̤̻͖͜O̤̲҉̑ͯ ͤ͊H̢̼̿͆ͥḀ̢̢ͮ̊L̫͈̳̪̀P̶̯͆̾͟
 **ping** - displays ping to discordapp.com
-**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>`)
-	if err != nil {
-		return "", err
-	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**pokemongo** - displays Pokémon Go server and Pokémon Trainer Club login statuses
+**playtime** [number (optional)] OR [username (options)] - shows up to <number> summated (probably incorrect) playtimes in hours of every game across all users, or top 10 games of <username>
+**pokemongo** - displays Pokémon Go server and Pokémon Trainer Club login statuses
 **recentplaytime** [duration] [[number (optional)] OR [username (options)]] - same as playtime but with a duration (like remindme) before normal args, calculates only as far back as duration
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **reminders** - messages you your pending reminders
 **rename** [new username] - renames bot
-**roll** [sides (optional)] - "rolls" a die with <sides> sides
-**spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
+**roll** [sides (optional)] - "rolls" a die with <sides> sides`)
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
 **spamuser** [username] - generates a message based on discord logs of <username>
 **spin** or **roulette** - spin roulette wheel
@@ -2917,7 +2920,8 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **@[user]++** - upvotes user
 **votes** [number (optional)] - displays top <number> users and their karma
 `+string([]byte{42, 42, 119, 97, 116, 99, 104, 108, 105, 115, 116, 42, 42, 32, 91, 110, 117, 109, 98, 101, 114, 32, 40, 111, 112, 116, 105, 111, 110, 97, 108, 41, 93, 32, 45, 32, 100, 105, 115, 112, 108, 97, 121, 115, 32, 116, 111, 112, 32, 60, 110, 117, 109, 98, 101, 114, 62, 32, 117, 115, 101, 114, 115, 32, 115, 111, 114, 116, 101, 100, 32, 98, 121, 32, 116, 101, 114, 114, 111, 114, 105, 115, 109, 32, 112, 101, 114, 32, 109, 101, 115, 115, 97, 103, 101})+`
-**xd**`)
+**xd**
+**zalgo** - alias for /ooer`)
 	if err != nil {
 		return "", err
 	}
@@ -3021,6 +3025,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"voicekick":      Command(voicekick),
 		"toponline":      Command(topOnline),
 		"ooer":           Command(ooer),
+		"zalgo":          Command(ooer),
 		"timeout":        Command(timeout),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
