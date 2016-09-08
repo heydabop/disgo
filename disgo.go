@@ -1192,7 +1192,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(31)
+		suh := Rand.Intn(32)
 		if err != nil {
 			return "", err
 		}
@@ -2921,7 +2921,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **votes** [number (optional)] - displays top <number> users and their karma
 `+string([]byte{42, 42, 119, 97, 116, 99, 104, 108, 105, 115, 116, 42, 42, 32, 91, 110, 117, 109, 98, 101, 114, 32, 40, 111, 112, 116, 105, 111, 110, 97, 108, 41, 93, 32, 45, 32, 100, 105, 115, 112, 108, 97, 121, 115, 32, 116, 111, 112, 32, 60, 110, 117, 109, 98, 101, 114, 62, 32, 117, 115, 101, 114, 115, 32, 115, 111, 114, 116, 101, 100, 32, 98, 121, 32, 116, 101, 114, 114, 111, 114, 105, 115, 109, 32, 112, 101, 114, 32, 109, 101, 115, 115, 97, 103, 101})+`
 **xd**
-**zalgo** - alias for /ooer`)
+**zalgo** [message] - H̢͘͢È̛̛͡ ̴̛̛̀͏Ç̸O̕͝͏͏͡M̷̕E͘͘͡S̶̛`)
 	if err != nil {
 		return "", err
 	}
