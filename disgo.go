@@ -1427,15 +1427,26 @@ func remindme(session *discordgo.Session, chanID, authorID, messageID string, ar
 
 func meme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	var opID, link string
-	err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND (Content LIKE 'http://%' OR Content LIKE 'https://%') AND AuthorId != ? ORDER BY RANDOM() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link)
-	if err != nil {
-		return "", err
+	for {
+		err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND (Content LIKE 'http://%' OR Content LIKE 'https://%') AND AuthorId != ? ORDER BY RANDOM() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link)
+		if err != nil {
+			return "", err
+		}
+		res, err := http.Head(link)
+		if err != nil {
+			return "", err
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			res.Body.Close()
+			continue
+		}
+		op, err := getUser(session, opID)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s: %s", op.Username, link), nil
 	}
-	op, err := getUser(session, opID)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s: %s", op.Username, link), nil
 }
 
 func bitrate(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
