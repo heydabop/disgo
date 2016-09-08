@@ -3300,7 +3300,7 @@ func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 	}
 	if timeoutTime, found := timeoutedUserIDs[v.UserID]; found {
 		if v.ChannelID != timeoutChanID && v.GuildID == timeoutGuildID && timeoutTime.Add(30*time.Second).After(time.Now()) {
-			err = s.GuildMemberMove(timeoutGuildID, v.UserID, timeoutChanID)
+			s.GuildMemberMove(timeoutGuildID, v.UserID, timeoutChanID)
 		}
 	}
 }
