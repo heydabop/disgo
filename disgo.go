@@ -147,6 +147,7 @@ var (
 	rouletteWheelValues               = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
 	startTime                         = time.Now()
 	sqlClient                         *sql.DB
+	timeoutedUserIDs                  = make(map[string]time.Time)
 	typingTimer                       = make(map[string]*time.Timer)
 	userIDRegex                       = regexp.MustCompile(`<@!?(\d+?)>`)
 	userIDUpQuotes                    = make(map[string][]string)
@@ -2713,11 +2714,14 @@ func voicekick(session *discordgo.Session, chanID, authorID, messageID string, a
 	if len(args) < 1 {
 		return "", errors.New("No userID provided")
 	}
-	var userID string
-	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
-		userID = match[1]
-	} else {
-		return "", errors.New("No valid mention found")
+	var userIDs []string
+	for _, arg := range args {
+		if match := userIDRegex.FindStringSubmatch(arg); match != nil {
+			userIDs = append(userIDs, match[1])
+		}
+	}
+	if len(userIDs) < 1 {
+		return "", errors.New("No valid mentions found")
 	}
 
 	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
@@ -2733,9 +2737,11 @@ func voicekick(session *discordgo.Session, chanID, authorID, messageID string, a
 	if err != nil {
 		return "", err
 	}
-	err = session.GuildMemberMove(newChan.GuildID, userID, newChan.ID)
-	if err != nil {
-		return "", err
+	for _, userID := range userIDs {
+		err = session.GuildMemberMove(newChan.GuildID, userID, newChan.ID)
+		if err != nil {
+			fmt.Println("ERROR in voicekick", err)
+		}
 	}
 	_, err = session.ChannelDelete(newChan.ID)
 	if err != nil {
@@ -2757,11 +2763,14 @@ func timeout(session *discordgo.Session, chanID, authorID, messageID string, arg
 	if len(args) < 1 {
 		return "", errors.New("No userID provided")
 	}
-	var userID string
-	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
-		userID = match[1]
-	} else {
-		return "", errors.New("No valid mention found")
+	var userIDs []string
+	for _, arg := range args {
+		if match := userIDRegex.FindStringSubmatch(arg); match != nil {
+			userIDs = append(userIDs, match[1])
+		}
+	}
+	if len(userIDs) < 1 {
+		return "", errors.New("No valid mentions found")
 	}
 
 	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
@@ -2772,9 +2781,13 @@ func timeout(session *discordgo.Session, chanID, authorID, messageID string, arg
 		return "I can't do that", nil
 	}
 
-	err = session.GuildMemberMove(channel.GuildID, userID, timeoutChanID)
-	if err != nil {
-		return "", err
+	now := time.Now()
+	for _, userID := range userIDs {
+		err = session.GuildMemberMove(timeoutGuildID, userID, timeoutChanID)
+		if err != nil {
+			fmt.Println("ERROR in timeout", err)
+		}
+		timeoutedUserIDs[userID] = now
 	}
 	return "", nil
 }
@@ -3284,6 +3297,11 @@ func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 		v.GuildID, v.ChannelID, v.UserID, v.SessionID, v.Deaf, v.Mute, v.SelfDeaf, v.SelfMute, v.Suppress, time.Now().Format(time.RFC3339Nano))
 	if err != nil {
 		fmt.Println("ERROR insert into VoiceState: ", err.Error())
+	}
+	if timeoutTime, found := timeoutedUserIDs[v.UserID]; found {
+		if v.ChannelID != timeoutChanID && v.GuildID == timeoutGuildID && timeoutTime.Add(30*time.Second).After(time.Now()) {
+			err = s.GuildMemberMove(timeoutGuildID, v.UserID, timeoutChanID)
+		}
 	}
 }
 
