@@ -2461,7 +2461,7 @@ func invite(session *discordgo.Session, chanID, authorID, messageID string, args
 		discordgo.PermissionVoiceSpeak |
 		discordgo.PermissionVoiceMoveMembers |
 		discordgo.PermissionKickMembers |
-		discordgo.PermissionManageChannels;
+		discordgo.PermissionManageChannels
 	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0x%X", appID, neededPermissions), nil
 }
 
@@ -2768,6 +2768,20 @@ func ooer(session *discordgo.Session, chanID, authorID, messageID string, args [
 	return string(message), nil
 }
 
+func serverAge(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	guild, err := session.State.Guild(chanID)
+	if err != nil {
+		return "", err
+	}
+	guildID, err := strconv.ParseUint(guild.ID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	creationTime := time.Unix(int64((guildID>>22)+1420070400000)/1000, 0)
+
+	return fmt.Sprintf("This server was created %s ago", timeSinceStr(time.Since(creationTime))), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2812,7 +2826,8 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**serverAge** - displays how long ago this server was created
+**spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
 **spamuser** [username] - generates a message based on discord logs of <username>
 **spin** or **roulette** - spin roulette wheel
@@ -2934,6 +2949,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"ooer":           Command(ooer),
 		"zalgo":          Command(ooer),
 		"timeout":        Command(timeout),
+		"serverage":      Command(serverAge),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
