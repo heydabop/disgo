@@ -906,7 +906,7 @@ func kickme(session *discordgo.Session, chanID, authorID, messageID string, args
 	if err != nil {
 		return "", err
 	}
-	if perm&0x2 == 0x2 {
+	if perm&discordgo.PermissionKickMembers == discordgo.PermissionKickMembers {
 		channel, err := session.State.Channel(chanID)
 		if err != nil {
 			return "", err
@@ -2452,7 +2452,17 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 }
 
 func invite(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0", appID), nil
+	neededPermissions := discordgo.PermissionReadMessages |
+		discordgo.PermissionSendMessages |
+		discordgo.PermissionManageMessages |
+		discordgo.PermissionEmbedLinks |
+		discordgo.PermissionAttachFiles |
+		discordgo.PermissionVoiceConnect |
+		discordgo.PermissionVoiceSpeak |
+		discordgo.PermissionVoiceMoveMembers |
+		discordgo.PermissionKickMembers |
+		discordgo.PermissionManageChannels;
+	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0x%X", appID, neededPermissions), nil
 }
 
 func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2616,7 +2626,7 @@ func voicekick(session *discordgo.Session, chanID, authorID, messageID string, a
 	if err != nil {
 		return "", err
 	}
-	if perm&0x10 != 0x10 || perm&0x1000000 != 0x1000000 {
+	if perm&discordgo.PermissionManageChannels != discordgo.PermissionManageChannels || perm&discordgo.PermissionVoiceMoveMembers != discordgo.PermissionVoiceMoveMembers {
 		return "I can't do that", nil
 	}
 
@@ -2665,7 +2675,7 @@ func timeout(session *discordgo.Session, chanID, authorID, messageID string, arg
 	if err != nil {
 		return "", err
 	}
-	if perm&0x1000000 != 0x1000000 {
+	if perm&discordgo.PermissionVoiceMoveMembers != discordgo.PermissionVoiceMoveMembers {
 		return "I can't do that", nil
 	}
 
@@ -2834,7 +2844,7 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 	if err != nil {
 		return
 	}
-	if lastTime, found := lastKappa[authorID]; perm&0x2000 == 0x2000 && (!found || time.Now().Sub(lastTime) > 30*time.Second) {
+	if lastTime, found := lastKappa[authorID]; perm&discordgo.PermissionManageMessages == discordgo.PermissionManageMessages && (!found || time.Now().Sub(lastTime) > 30*time.Second) {
 		image, err := os.Open("kappa.png")
 		if err != nil {
 			return
