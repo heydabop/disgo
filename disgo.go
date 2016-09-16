@@ -2864,9 +2864,11 @@ func track(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", err
 	}
 
-	_, err = sqlClient.Exec("INSERT INTO Shipment(Carrier, TrackingNumber, ChanId, AuthorId) VALUES (?, ?, ?, ?)", status.Carrier, status.TrackingNumber, chanID, authorID)
-	if err != nil {
-		fmt.Println("ERROR insert into Shipment", err)
+	if status.TrackingStatus.Status != "DELIVERED" && status.TrackingStatus.Status != "FAILURE" {
+		_, err = sqlClient.Exec("INSERT INTO Shipment(Carrier, TrackingNumber, ChanId, AuthorId) VALUES (?, ?, ?, ?)", status.Carrier, status.TrackingNumber, chanID, authorID)
+		if err != nil {
+			fmt.Println("ERROR insert into Shipment", err)
+		}
 	}
 
 	message := ""
