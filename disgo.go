@@ -688,7 +688,13 @@ func twitch(session *discordgo.Session, chanID, authorID, messageID string, args
 		return "", errors.New("No stream provided")
 	}
 	streamName := args[0]
-	res, err := http.Get(fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", url.QueryEscape(streamName)))
+	client := http.Client{}
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", url.QueryEscape(streamName)), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Client-ID", twitchClientID)
+	res, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
