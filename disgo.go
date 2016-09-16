@@ -3704,7 +3704,7 @@ func main() {
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
-	checkShipments(client)
+	time.AfterFunc(5*time.Minute, func() { checkShipments(client) })
 
 	go func() {
 		http.HandleFunc("/goshippo", goShippoHandler)
