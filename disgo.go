@@ -914,7 +914,31 @@ func kickme(session *discordgo.Session, chanID, authorID, messageID string, args
 		time.AfterFunc(time.Second*time.Duration(Rand.Intn(6)+4), func() {
 			err := session.GuildMemberDelete(channel.GuildID, authorID)
 			if err != nil {
+				fmt.Println("ERROR in kickme", err)
 				session.ChannelMessageSend(chanID, "jk")
+				return
+			}
+			inv, err := session.ChannelInviteCreate(
+				chanID,
+				discordgo.Invite{
+					MaxAge:    600, //10 minutes
+					MaxUses:   1,
+					Temporary: false,
+				})
+			if err != nil {
+				fmt.Println("ERROR in kickme", err)
+				return
+			}
+			privChan, err := session.UserChannelCreate(authorID)
+			if err != nil {
+				fmt.Println("ERROR in kickme", err)
+				return
+			}
+			time.Sleep(5 * time.Second)
+			_, err = session.ChannelMessageSend(privChan.ID, fmt.Sprintf("https://discord.gg/%s", inv.Code))
+			if err != nil {
+				fmt.Println("ERROR in kickme", err)
+				return
 			}
 		})
 		return "See ya nerd.", nil
@@ -2460,6 +2484,7 @@ func invite(session *discordgo.Session, chanID, authorID, messageID string, args
 		discordgo.PermissionVoiceConnect |
 		discordgo.PermissionVoiceSpeak |
 		discordgo.PermissionVoiceMoveMembers |
+		discordgo.PermissionCreateInstantInvite |
 		discordgo.PermissionKickMembers |
 		discordgo.PermissionManageChannels
 	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0x%X", appID, neededPermissions), nil
@@ -2950,6 +2975,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"zalgo":          Command(ooer),
 		"timeout":        Command(timeout),
 		"serverage":      Command(serverAge),
+		"kms":            Command(kickme),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
