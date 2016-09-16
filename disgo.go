@@ -114,6 +114,14 @@ type DiscordError struct {
 	Message string `json:"message"`
 }
 
+type ShippoTrack struct {
+	TrackingStatus struct {
+		Status        string    `json:"status"`
+		StatusDetails string    `json:"status_details"`
+		StatusDate    time.Time `json:"status_date"`
+	} `json:"tracking_status"`
+}
+
 var (
 	currentGame                       string
 	currentVoiceSession               *discordgo.VoiceConnection
@@ -2807,6 +2815,53 @@ func serverAge(session *discordgo.Session, chanID, authorID, messageID string, a
 	return fmt.Sprintf("This server was created %s ago", timeSinceStr(time.Since(creationTime))), nil
 }
 
+func fedex(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No tracking number provided")
+	}
+	trackingNum := args[0]
+	client := http.Client{}
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.goshippo.com/v1/tracks/fedex/%s", trackingNum), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("ShippoToken %s", shippoToken))
+	res, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	var status ShippoTrack
+	if err := json.Unmarshal(body, &status); err != nil {
+		return "", err
+	}
+	fmt.Println(string(body))
+	fmt.Printf("%+v\n", status)
+	message := ""
+	switch status.TrackingStatus.Status {
+	case "UNKNOWN":
+		message = fmt.Sprintf("Unable to find shipment with tracking number %s", trackingNum)
+	case "TRANSIT":
+		message = "Your shipment is in transit"
+	case "DELIVERED":
+		message = fmt.Sprintf("Your shipment was delivered at %s", status.TrackingStatus.StatusDate.Format(time.RFC1123Z))
+	case "RETURNED":
+		message = "Your shipment is being or has been returned to sender"
+	case "FAILURE":
+		message = fmt.Sprintf("There was an issue with delivery: %s", status.TrackingStatus.StatusDetails)
+	default:
+		return "", fmt.Errorf("Unrecognized status: %s", status.TrackingStatus.Status)
+	}
+	return message, nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2976,6 +3031,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"timeout":        Command(timeout),
 		"serverage":      Command(serverAge),
 		"kms":            Command(kickme),
+		"fedex":          Command(fedex),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
