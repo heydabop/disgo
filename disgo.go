@@ -115,6 +115,8 @@ type DiscordError struct {
 }
 
 type ShippoTrack struct {
+	Carrier        string `json:"carrier"`
+	TrackingNumber string `json:"tracking_number"`
 	TrackingStatus struct {
 		Status        string    `json:"status"`
 		StatusDetails string    `json:"status_details"`
@@ -350,6 +352,36 @@ func getMarkovFilelist(name string) (files []string, err error) {
 	}
 	files = strings.Fields(string(out))
 	return
+}
+
+func getShippoTrack(carrier, trackingNum string) (*ShippoTrack, error) {
+	client := http.Client{}
+	req, err := http.NewRequest(
+		"POST",
+		"https://api.goshippo.com/v1/tracks/",
+		bytes.NewBufferString(url.Values{"carrier": {carrier}, "tracking_number": {trackingNum}, "metadata": {"Bot created"}}.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", fmt.Sprintf("ShippoToken %s", shippoToken))
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		return nil, errors.New(res.Status)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var status ShippoTrack
+	if err := json.Unmarshal(body, &status); err != nil {
+		return nil, err
+	}
+	return &status, nil
 }
 
 func spam(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2815,35 +2847,22 @@ func serverAge(session *discordgo.Session, chanID, authorID, messageID string, a
 	return fmt.Sprintf("This server was created %s ago", timeSinceStr(time.Since(creationTime))), nil
 }
 
-func fedex(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	if len(args) < 1 {
-		return "", errors.New("No tracking number provided")
+func track(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	if len(args) < 2 {
+		return "", errors.New("Missing carrier or tracking number")
 	}
-	trackingNum := args[0]
-	client := http.Client{}
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.goshippo.com/v1/tracks/fedex/%s", trackingNum), nil)
+	carrier := args[0]
+	trackingNum := args[1]
+	status, err := getShippoTrack(carrier, trackingNum)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Authorization", fmt.Sprintf("ShippoToken %s", shippoToken))
-	res, err := client.Do(req)
+
+	_, err = sqlClient.Exec("INSERT INTO Shipment(Carrier, TrackingNumber, ChanId, AuthorId) VALUES (?, ?, ?, ?)", status.Carrier, status.TrackingNumber, chanID, authorID)
 	if err != nil {
-		return "", err
+		fmt.Println("ERROR insert into Shipment", err)
 	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var status ShippoTrack
-	if err := json.Unmarshal(body, &status); err != nil {
-		return "", err
-	}
-	fmt.Println(string(body))
-	fmt.Printf("%+v\n", status)
+
 	message := ""
 	switch status.TrackingStatus.Status {
 	case "UNKNOWN":
@@ -3031,7 +3050,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"timeout":        Command(timeout),
 		"serverage":      Command(serverAge),
 		"kms":            Command(kickme),
-		"fedex":          Command(fedex),
+		"track":          Command(track),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -3474,6 +3493,69 @@ func giveAllowance() {
 	}
 }
 
+func goShippoHandler(w http.ResponseWriter, req *http.Request) {
+	fmt.Println("in shippo handler")
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println("ERROR reading request body", err)
+		return
+	}
+	var status ShippoTrack
+	if err := json.Unmarshal(body, &status); err != nil {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println("ERROR unmarshaling request body", err)
+		return
+	}
+	fmt.Printf("%+v\n", status)
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func checkShipments(s *discordgo.Session) {
+	defer time.AfterFunc(5*time.Minute, func() { checkShipments(s) })
+	rows, err := sqlClient.Query("SELECT Carrier, TrackingNumber, ChanId, AuthorId FROM Shipment")
+	if err != nil {
+		fmt.Println("ERROR selecting from shipment", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var carrier, trackingNum, chanID, authorID string
+		if err := rows.Scan(&carrier, &trackingNum, &chanID, &authorID); err != nil {
+			fmt.Println("ERROR scanning shipment", err)
+			continue
+		}
+		status, err := getShippoTrack(carrier, trackingNum)
+		if err != nil {
+			fmt.Println("ERROR getting shipment status", err)
+			continue
+		}
+		if status.TrackingStatus.Status == "DELIVERED" || status.TrackingStatus.Status == "FAILURE" {
+			var statusStr string
+			switch status.TrackingStatus.Status {
+			case "DELIVERED":
+				statusStr = "delivered"
+			case "FAILURE":
+				statusStr = "failed"
+			}
+			if _, err := s.ChannelMessageSend(chanID, fmt.Sprintf("<@%s>: Your %s shipment %s was marked as %s at %s with the following message: %s", authorID, status.Carrier, status.TrackingNumber, statusStr, status.TrackingStatus.StatusDate.Format(time.RFC1123Z), status.TrackingStatus.StatusDetails)); err != nil {
+				fmt.Println("ERROR sending shipment message", err)
+				continue
+			}
+			if _, err := sqlClient.Exec("DELETE FROM Shipment WHERE Carrier = ? AND TrackingNumber = ? AND ChanId = ? AND AuthorId = ?", carrier, trackingNum, chanID, authorID); err != nil {
+				fmt.Println("ERROR removing shipment", err)
+				continue
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		fmt.Println("ERROR calling next on rows", err)
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
@@ -3615,6 +3697,15 @@ func main() {
 	now = time.Now()
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
+
+	checkShipments(client)
+
+	go func() {
+		http.HandleFunc("/goshippo", goShippoHandler)
+		if err := http.ListenAndServe(":8080", nil); err != nil {
+			fmt.Println("ERROR starting HTTP server", err)
+		}
+	}()
 
 	select {}
 }
