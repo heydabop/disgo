@@ -3502,38 +3502,18 @@ func giveAllowance() {
 	}
 }
 
-func goShippoHandler(w http.ResponseWriter, req *http.Request) {
-	fmt.Println("in shippo handler")
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Println("ERROR reading request body", err)
-		return
-	}
-	var status ShippoTrack
-	if err := json.Unmarshal(body, &status); err != nil {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Println("ERROR unmarshaling request body", err)
-		return
-	}
-	fmt.Printf("%+v\n", status)
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func checkShipments(s *discordgo.Session) {
 	defer time.AfterFunc(5*time.Minute, func() { checkShipments(s) })
-	rows, err := sqlClient.Query("SELECT Carrier, TrackingNumber, ChanId, AuthorId FROM Shipment")
+	rows, err := sqlClient.Query("SELECT Id, Carrier, TrackingNumber, ChanId, AuthorId FROM Shipment")
 	if err != nil {
 		fmt.Println("ERROR selecting from shipment", err)
 	}
 	defer rows.Close()
+	var toDelete []int
 	for rows.Next() {
+		var ID int
 		var carrier, trackingNum, chanID, authorID string
-		if err := rows.Scan(&carrier, &trackingNum, &chanID, &authorID); err != nil {
+		if err := rows.Scan(&ID, &carrier, &trackingNum, &chanID, &authorID); err != nil {
 			fmt.Println("ERROR scanning shipment", err)
 			continue
 		}
@@ -3554,14 +3534,17 @@ func checkShipments(s *discordgo.Session) {
 				fmt.Println("ERROR sending shipment message", err)
 				continue
 			}
-			if _, err := sqlClient.Exec("DELETE FROM Shipment WHERE Carrier = ? AND TrackingNumber = ? AND ChanId = ? AND AuthorId = ?", carrier, trackingNum, chanID, authorID); err != nil {
-				fmt.Println("ERROR removing shipment", err)
-				continue
-			}
+			toDelete = append(toDelete, ID)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		fmt.Println("ERROR calling next on rows", err)
+	}
+	for _, ID := range toDelete {
+		if _, err := sqlClient.Exec("DELETE FROM Shipment WHERE Id = ?", ID); err != nil {
+			fmt.Println("ERROR removing shipment", err)
+			continue
+		}
 	}
 }
 
@@ -3708,13 +3691,6 @@ func main() {
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
 	time.AfterFunc(5*time.Minute, func() { checkShipments(client) })
-
-	go func() {
-		http.HandleFunc("/goshippo", goShippoHandler)
-		if err := http.ListenAndServe(":8080", nil); err != nil {
-			fmt.Println("ERROR starting HTTP server", err)
-		}
-	}()
 
 	select {}
 }
