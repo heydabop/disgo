@@ -2920,7 +2920,8 @@ func gtext(session *discordgo.Session, chanID, authorID, messageID string, args 
 
 func greentext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	numMessages := Rand.Intn(5) + 3
-	rows, err := sqlClient.Query(fmt.Sprintf("SELECT Content FROM Message WHERE ChanId = ? AND AuthorId != ? AND LENGTH(Content) > 0 ORDER BY RANDOM() LIMIT %d", numMessages), chanID, ownUserID)
+	rows, err := sqlClient.Query(fmt.Sprintf(`SELECT Content FROM Message WHERE ChanId = ? AND AuthorId != ? AND LENGTH(Content) > 0 AND Content NOT LIKE '%%
+%%' ORDER BY RANDOM() LIMIT %d`, numMessages), chanID, ownUserID)
 	if err != nil {
 		return "", err
 	}
@@ -2930,7 +2931,7 @@ func greentext(session *discordgo.Session, chanID, authorID, messageID string, a
 		if err := rows.Scan(&message); err != nil {
 			return "", err
 		}
-		messages = append(messages, strings.Replace(message, "'", "", -1))
+		messages = append(messages, strings.Replace(message, `'`, `\'`, -1))
 	}
 	if err := rows.Err(); err != nil {
 		return "", err
