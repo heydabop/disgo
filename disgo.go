@@ -2889,32 +2889,85 @@ func track(session *discordgo.Session, chanID, authorID, messageID string, args 
 	return message, nil
 }
 
-func greentext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+func gtext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	/*user, err := getUser(session, authorID)
 	if err != nil {
 		fmt.Println(err)
 		return "", nil
 	}*/
+	imageFile, err := ioutil.TempFile("", "disgoGtext")
+	if err != nil {
+		fmt.Println(err)
+		return "", nil
+	}
+	defer os.Remove(imageFile.Name())
+
+	if err = exec.Command("convert", "-size", "400x12", "xc:transparent", "-font", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "-pointsize", "10", "-fill", "#789922", "-stroke", "#789922", "-draw", fmt.Sprintf("text 0,10 '%s'", fmt.Sprintf(">%s", args[0])), fmt.Sprintf("png:%s", imageFile.Name())).Run(); err != nil {
+		fmt.Println(err)
+		return "", nil
+	}
+
+	_, err = session.ChannelFileSend(chanID, "greentext.png", imageFile)
+	if err != nil {
+		fmt.Println(err)
+		return "", nil
+	}
+	if err := session.ChannelMessageDelete(chanID, messageID); err != nil {
+		fmt.Println(err)
+	}
+	return "", nil
+}
+
+func greentext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	numMessages := Rand.Intn(5) + 3
+	rows, err := sqlClient.Query(fmt.Sprintf("SELECT Content FROM Message WHERE ChanId = ? AND AuthorId != ? AND LENGTH(Content) > 0 ORDER BY RANDOM() LIMIT %d", numMessages), chanID, ownUserID)
+	if err != nil {
+		return "", err
+	}
+	messages := make([]string, 0, numMessages)
+	for rows.Next() {
+		var message string
+		if err := rows.Scan(&message); err != nil {
+			return "", err
+		}
+		messages = append(messages, strings.Replace(message, "'", "", -1))
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	drawArg := ""
+	for i, message := range messages {
+		drawArg += fmt.Sprintf("text 0,%d '>%s'", 10*(i+1), message)
+	}
+
 	imageFile, err := ioutil.TempFile("", "disgoGreentext")
 	if err != nil {
 		fmt.Println(err)
 		return "", nil
 	}
 	defer os.Remove(imageFile.Name())
-	fmt.Println(args[0])
-	if err = exec.Command("convert", "-size", "300x20", "xc:transparent", "-font", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "-pointsize", "10", "-fill", "#789922", "-stroke", "#789922", "-draw", fmt.Sprintf("text 0,10 '%s'", fmt.Sprintf(">%s", args[0])), fmt.Sprintf("png:%s", imageFile.Name())).Run(); err != nil {
-		fmt.Println(err)
-		return "", nil
+	if err = exec.Command(
+		"convert",
+		"-size",
+		fmt.Sprintf("400x%d", 10*(numMessages+1)),
+		"xc:transparent",
+		"-font",
+		"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+		"-pointsize",
+		"10",
+		"-fill",
+		"#789922",
+		"-stroke",
+		"#789922",
+		"-draw",
+		drawArg,
+		fmt.Sprintf("png:%s", imageFile.Name())).Run(); err != nil {
+		return "", err
 	}
-	_, err = session.ChannelFileSend(chanID, "greentext.png", imageFile)
+	_, err = session.ChannelFileSend(chanID, "text.png", imageFile)
 	if err != nil {
 		fmt.Println(err)
 		return "", nil
-	} else {
-		if err := session.ChannelMessageDelete(chanID, messageID); err != nil {
-			fmt.Println(err)
-			return "", nil
-		}
 	}
 	return "", nil
 }
@@ -3091,6 +3144,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"serverage":      Command(serverAge),
 		"kms":            Command(kickme),
 		"track":          Command(track),
+		"greentext":      Command(greentext),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
@@ -3226,7 +3280,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			return
 		}
 		if match := greenTextRegex.FindStringSubmatch(m.Content); match != nil {
-			greentext(s, m.ChannelID, m.Author.ID, m.ID, []string{match[1]})
+			gtext(s, m.ChannelID, m.Author.ID, m.ID, []string{match[1]})
 			return
 		}
 		/*if match := oddshotRegex.FindString(m.Content); match != "" {
