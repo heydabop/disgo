@@ -227,7 +227,7 @@ func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (
 	return maxUserID, nil
 }
 
-func getGameTimesFromRows(rows *sql.Rows) (UserMessageLengths, time.Time, int, error) {
+func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.Time, int, error) {
 	userGame := make(map[string]string)
 	userTime := make(map[string]time.Time)
 	gameTime := make(map[string]float64)
@@ -273,14 +273,17 @@ func getGameTimesFromRows(rows *sql.Rows) (UserMessageLengths, time.Time, int, e
 		gameTime[game] += now.Sub(lastTime).Hours()
 	}
 	gameTimes := make(UserMessageLengths, 0)
-	longestGameLength := 0
 	for game, time := range gameTime {
 		gameTimes = append(gameTimes, UserMessageLength{game, time})
-		if len(game) > longestGameLength {
-			longestGameLength = len(game)
-		}
 	}
 	sort.Sort(&gameTimes)
+	gameTimes = gameTimes[:limit]
+	longestGameLength := 0
+	for _, game := range gameTimes {
+		if len(game.AuthorID) > longestGameLength {
+			longestGameLength = len(game.AuthorID)
+		}
+	}
 	return gameTimes, firstTime, longestGameLength, nil
 }
 
@@ -1154,6 +1157,23 @@ func xd(session *discordgo.Session, chanID, authorID, messageID string, args []s
 }
 
 func asuh(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	var userID, joinUserID string
+	if len(args) > 0 {
+		var err error
+		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+			userID = match[1]
+		} else {
+			userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	if len(userID) > 0 {
+		joinUserID = userID
+	} else {
+		joinUserID = authorID
+	}
 	voiceMutex.Lock()
 	defer voiceMutex.Unlock()
 
@@ -1167,7 +1187,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 	}
 	voiceChanID := ""
 	for _, state := range guild.VoiceStates {
-		if state.UserID == authorID {
+		if state.UserID == joinUserID {
 			voiceChanID = state.ChannelID
 			break
 		}
@@ -1751,14 +1771,14 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 		}
 	}
 	if rows == nil {
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID)
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND UserId != ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID, musicBotID)
 	}
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 
-	gameTimes, firstTime, longestGameLength, err := getGameTimesFromRows(rows)
+	gameTimes, firstTime, longestGameLength, err := getGameTimesFromRows(rows, limit)
 	if err != nil {
 		return "", err
 	}
@@ -1774,8 +1794,8 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 		message = fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
 	}
 	message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", "All Games", totalTime)
-	for i := 0; i < limit && i < len(gameTimes); i++ {
-		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
+	for _, gameTime := range gameTimes {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTime.AuthorID, gameTime.AvgLength)
 	}
 	return fmt.Sprintf("```%s```", message), nil
 }
@@ -1858,14 +1878,14 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 		}
 	}
 	if rows == nil {
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND Timestamp > ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID, startTime.Format(time.RFC3339))
+		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND UserId != ? AND Timestamp > ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID, musicBotID, startTime.Format(time.RFC3339))
 	}
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 
-	gameTimes, _, longestGameLength, err := getGameTimesFromRows(rows)
+	gameTimes, _, longestGameLength, err := getGameTimesFromRows(rows, limit)
 	if err != nil {
 		return "", err
 	}
@@ -1881,8 +1901,8 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 		message = fmt.Sprintf("Since %s\n", startTime.Format(time.RFC1123Z))
 	}
 	message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", "All Games", totalTime)
-	for i := 0; i < limit && i < len(gameTimes); i++ {
-		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTimes[i].AuthorID, gameTimes[i].AvgLength)
+	for _, gameTime := range gameTimes {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestGameLength)+"s — %.2f\n", gameTime.AuthorID, gameTime.AvgLength)
 	}
 	return fmt.Sprintf("```%s```", message), nil
 }
@@ -2973,6 +2993,31 @@ func greentext(session *discordgo.Session, chanID, authorID, messageID string, a
 	return "", nil
 }
 
+func totalMessages(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	var messages uint64
+	if err := sqlClient.QueryRow("SELECT COUNT(id) FROM Message WHERE ChanId = ?", chanID).Scan(&messages); err != nil {
+		return "", err
+	}
+	var timestamp string
+	if err := sqlClient.QueryRow("SELECT Timestamp FROM Message WHERE ChanId = ? ORDER BY Timestamp ASC LIMIT 1", chanID).Scan(&timestamp); err != nil {
+		return "", err
+	}
+	firstTime, err := time.Parse(time.RFC3339Nano, timestamp)
+	if err != nil {
+		return "", err
+	}
+	timeSince := time.Since(firstTime)
+	return fmt.Sprintf("%d messages have been sent in this channel since %s\nThat's %.2f per day or %.2f per hour", messages, firstTime.Format(time.RFC1123Z), float64(messages)/(timeSince.Hours()/24), float64(messages)/timeSince.Hours()), nil
+}
+
+func totalServers(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	userGuilds, err := session.UserGuilds()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("I am currently a memebr of %d servers", len(userGuilds)), nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2996,13 +3041,15 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if err != nil {
 		return "", err
 	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, `**karma** [number (optional)] - displays top <number> users and their karma
+	_, err = session.ChannelMessageSend(privateChannel.ID, `**greentext** - makes greentext with a couple messages from the channel's history
+**karma** [number (optional)] - displays top <number> users and their karma
 **lastplayed** [username] - displays game last played by <username>
 **lastseen** [username] - displays when <username> was last seen
 **lastmessage** [username] - displays when <username> last sent a message
 **lirik** - alias for /spam lirik
 **math** [math stuff] - does math
 **meme** - random meme from channel history
+**messages** - displays how many messages have been sent in this channel
 **money** [number (optional)] - displays top <number> users and their money
 **ooer** [message] - Ǫ̧̩͟͜H̝̼ ̡̳͖͑̇M̔́Aͤ̓Ńͮ ̛̔ͯ͌ͪĮ̷̒̀͠ ͦ͋̐̾͡Ḁ̶͗ͪ͡Mͧͪ ̧ͩN̴̫̳̚͢Ǫ͈̬̫̏T̢̟̭͎͈ ̷̳̜̦͆G̵͛O̿́O̯͇̎̋͝D͖̈ ̼̰W͙̦̿͞͝I̛̮̊ͦ̚T̘͑H̨͎̲̑͢ ̢̗͍̟̽C̀ͯ͊̀͡O̷͈ͯ͌ͅM̓̓P̢̬̋̃͊U̜̱̓͡͞T̀̇Ě̷R̈̎ ̨̭ͭ̿͠P̳ͯͩ̎͟Ľ̳͏̨̩Ž̯ ͇̜Ť̤̻͖͜O̤̲҉̑ͯ ͤ͊H̢̼̿͆ͥḀ̢̢ͮ̊L̫͈̳̪̀P̶̯͆̾͟
 **ping** - displays ping to discordapp.com
@@ -3146,6 +3193,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"kms":            Command(kickme),
 		"track":          Command(track),
 		"greentext":      Command(greentext),
+		"messages":       Command(totalMessages),
+		"servers":        Command(totalServers),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
