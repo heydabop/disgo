@@ -2889,6 +2889,36 @@ func track(session *discordgo.Session, chanID, authorID, messageID string, args 
 	return message, nil
 }
 
+func greentext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	/*user, err := getUser(session, authorID)
+	if err != nil {
+		fmt.Println(err)
+		return "", nil
+	}*/
+	imageFile, err := ioutil.TempFile("", "disgoGreentext")
+	if err != nil {
+		fmt.Println(err)
+		return "", nil
+	}
+	defer os.Remove(imageFile.Name())
+	fmt.Println(args[0])
+	if err = exec.Command("convert", "-size", "300x20", "xc:transparent", "-font", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "-pointsize", "10", "-fill", "#789922", "-stroke", "#789922", "-draw", fmt.Sprintf("text 0,10 '%s'", fmt.Sprintf(">%s", args[0])), fmt.Sprintf("png:%s", imageFile.Name())).Run(); err != nil {
+		fmt.Println(err)
+		return "", nil
+	}
+	_, err = session.ChannelFileSend(chanID, "greentext.png", imageFile)
+	if err != nil {
+		fmt.Println(err)
+		return "", nil
+	} else {
+		if err := session.ChannelMessageDelete(chanID, messageID); err != nil {
+			fmt.Println(err)
+			return "", nil
+		}
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -2992,6 +3022,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
+	greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*(.+)$`)
 	funcMap := map[string]Command{
 		"spam":           Command(spam),
 		"soda":           Command(soda),
@@ -3192,6 +3223,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		}
 		if match := kappaRegex.FindStringSubmatch(m.Content); match != nil {
 			kappa(s, m.ChannelID, m.Author.ID, m.ID)
+			return
+		}
+		if match := greenTextRegex.FindStringSubmatch(m.Content); match != nil {
+			greentext(s, m.ChannelID, m.Author.ID, m.ID, []string{match[1]})
 			return
 		}
 		/*if match := oddshotRegex.FindString(m.Content); match != "" {
