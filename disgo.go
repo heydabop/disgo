@@ -3018,6 +3018,10 @@ func totalServers(session *discordgo.Session, chanID, authorID, messageID string
 	return fmt.Sprintf("I am currently a memebr of %d servers", len(userGuilds)), nil
 }
 
+func source(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	return "https://github.com/heydabop/disgo", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3195,6 +3199,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"greentext":      Command(greentext),
 		"messages":       Command(totalMessages),
 		"servers":        Command(totalServers),
+		"source":         Command(source),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
