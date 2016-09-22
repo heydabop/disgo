@@ -277,6 +277,9 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 		gameTimes = append(gameTimes, UserMessageLength{game, time})
 	}
 	sort.Sort(&gameTimes)
+	if limit > len(gameTimes) {
+		limit = len(gameTimes)
+	}
 	gameTimes = gameTimes[:limit]
 	longestGameLength := 0
 	for _, game := range gameTimes {
@@ -3335,7 +3338,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			return
 		}
 		if match := greenTextRegex.FindStringSubmatch(m.Content); match != nil {
-			gtext(s, m.ChannelID, m.Author.ID, m.ID, []string{match[1]})
+			gtext(s, m.ChannelID, m.Author.ID, m.ID, []string{strings.Replace(match[1], `'`, `\'`, -1)})
 			return
 		}
 		/*if match := oddshotRegex.FindString(m.Content); match != "" {
