@@ -1220,7 +1220,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if currentVoiceTimer != nil {
 		currentVoiceTimer.Stop()
 	}
-	currentVoiceTimer = time.AfterFunc(1*time.Minute, func() {
+	currentVoiceTimer = time.AfterFunc(30*time.Second, func() {
 		if currentVoiceSession != nil {
 			dgvoice.KillPlayer()
 			err := currentVoiceSession.Disconnect()
@@ -1237,7 +1237,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(32)
+		suh := Rand.Intn(34)
 		if err != nil {
 			return "", err
 		}
