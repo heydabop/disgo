@@ -1644,15 +1644,15 @@ func lastUserMessage(session *discordgo.Session, chanID, authorID, messageID str
 }
 
 func reminders(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	rows, err := sqlClient.Query("SELECT Time, Content FROM Reminder WHERE ChanId = ? AND AuthorId = ? AND Time > ? ORDER BY Time ASC", chanID, authorID, time.Now().In(time.FixedZone("UTC", 0)).Format(time.RFC3339Nano))
+	rows, err := sqlClient.Query("SELECT AuthorId, Time, Content FROM Reminder WHERE ChanId = ? AND Time > ? ORDER BY Time ASC", chanID, time.Now().In(time.FixedZone("UTC", 0)).Format(time.RFC3339Nano))
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 	message := ""
 	for rows.Next() {
-		var content, timestamp string
-		err = rows.Scan(&timestamp, &content)
+		var authorID, content, timestamp string
+		err = rows.Scan(&authorID, &timestamp, &content)
 		if err != nil {
 			return "", err
 		}
@@ -1660,21 +1660,16 @@ func reminders(session *discordgo.Session, chanID, authorID, messageID string, a
 		if err != nil {
 			return "", err
 		}
-		message += fmt.Sprintf("%s — %s\n", remindTime.Format(time.RFC1123Z), content)
+		author, err := getUser(session, authorID)
+		if err != nil {
+			return "", err
+		}
+		message += fmt.Sprintf("%s - %s — %s\n", author.Username, remindTime.Format(time.RFC1123Z), content)
 	}
 	if len(message) < 1 {
-		return "You have no pending reminders.", nil
+		return "The channel has no pending reminders.", nil
 	}
-	privateChannel, err := session.UserChannelCreate(authorID)
-	if err != nil {
-		return "", err
-	}
-	_, err = session.ChannelMessageSend(privateChannel.ID, message)
-	if err != nil {
-		return "", err
-	}
-	session.ChannelMessageDelete(chanID, messageID)
-	return "", nil
+	return message, nil
 }
 
 func color(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3065,7 +3060,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
-**reminders** - messages you your pending reminders
+**reminders** - list this channels pending reminders
 **rename** [new username] - renames bot
 **roll** [sides (optional)] - "rolls" a die with <sides> sides`)
 	if err != nil {
@@ -3121,7 +3116,7 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
-	regexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + ownUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
+	commandRegexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + ownUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
 	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
@@ -3345,11 +3340,20 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			executeCommand(s, m, []string{"oddshot", match})
 			return
 		}*/
-		for _, regex := range regexes {
+		for _, regex := range commandRegexes {
 			if match := regex.FindStringSubmatch(m.Content); match != nil {
 				executeCommand(s, m, strings.Fields(match[1]))
 				return
 			}
+		}
+		channel, err := s.State.Channel(m.ChannelID)
+		if err != nil {
+			fmt.Println("ERROR: ", err)
+			return
+		}
+		if channel.IsPrivate {
+			executeCommand(s, m, strings.Fields(m.Content))
+			return
 		}
 	}
 }
