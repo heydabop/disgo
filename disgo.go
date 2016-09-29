@@ -15,7 +15,7 @@ import (
 	"github.com/chuckpreslar/rcon"
 	"github.com/gyuho/goling/similar"
 	mcrcon "github.com/james4k/rcon"
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"image"
@@ -233,12 +233,9 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 	gameTime := make(map[string]float64)
 	firstTime := time.Now()
 	for rows.Next() {
-		var userID, timestamp, game string
-		err := rows.Scan(&userID, &timestamp, &game)
-		if err != nil {
-			return make(UserMessageLengths, 0), time.Now(), 0, err
-		}
-		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		var userID, game string
+		var currTime time.Time
+		err := rows.Scan(&userID, &currTime, &game)
 		if err != nil {
 			return make(UserMessageLengths, 0), time.Now(), 0, err
 		}
@@ -324,12 +321,10 @@ func getBetDetails(guildID, authorID string, args []string, req int) (float64, [
 		return -1, []int{}, err
 	}
 	var money float64
-	err = sqlClient.QueryRow("SELECT Money FROM UserMoney WHERE GuildId = ? AND UserId = ?", guildID, authorID).Scan(&money)
-	if err != nil {
+	if err := sqlClient.QueryRow(`SELECT money FROM user_money WHERE guild_id = $1 AND user_id = $2`, guildID, authorID).Scan(&money); err != nil {
 		if err == sql.ErrNoRows {
 			money = 10
-			_, err := sqlClient.Exec("INSERT INTO UserMoney(GuildId, UserId, Money) VALUES (?, ?, ?)", guildID, authorID, money)
-			if err != nil {
+			if _, err := sqlClient.Exec(`INSERT INTO user_money(guild_id, user_id, money) VALUES ($1, $2, $3)`, guildID, authorID, money); err != nil {
 				return -1, []int{}, err
 			}
 		} else {
@@ -443,7 +438,7 @@ func spam(session *discordgo.Session, chanID, authorID, messageID string, args [
 }
 
 func changeMoney(guildID, userID string, value float64) error {
-	_, err := sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", value, guildID, userID)
+	_, err := sqlClient.Exec(`UPDATE user_money SET money = money + $1 WHERE guild_id = $2 AND user_id = $3`, value, guildID, userID)
 	return err
 }
 
@@ -497,18 +492,12 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "No.", nil
 	}
 
-	var lastVoterIDAgainstUser, lastVoteTimestamp string
+	var lastVoterIDAgainstUser string
 	var lastVoteTime time.Time
-	err = sqlClient.QueryRow("select VoterId, Timestamp from Vote where GuildId = ? and VoteeId = ? order by Timestamp desc limit 1", channel.GuildID, authorID).Scan(&lastVoterIDAgainstUser, &lastVoteTimestamp)
-	if err != nil {
+	if err := sqlClient.QueryRow(`SELECT voter_id, create_date FROM vote WHERE guild_id = $1 AND votee_id = $2 ORDER BY create_date DESC LIMIT 1`, channel.GuildID, authorID).Scan(&lastVoterIDAgainstUser, &lastVoteTime); err != nil {
 		if err == sql.ErrNoRows {
 			lastVoterIDAgainstUser = ""
 		} else {
-			return "", err
-		}
-	} else {
-		lastVoteTime, err = time.Parse(time.RFC3339Nano, lastVoteTimestamp)
-		if err != nil {
 			return "", err
 		}
 	}
@@ -516,16 +505,10 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "Really?...", nil
 	}
 	var lastVoteeIDFromAuthor string
-	err = sqlClient.QueryRow("select VoteeId, Timestamp from Vote where GuildId = ? and VoterId = ? order by Timestamp desc limit 1", channel.GuildID, authorID).Scan(&lastVoteeIDFromAuthor, &lastVoteTimestamp)
-	if err != nil {
+	if err := sqlClient.QueryRow(`SELECT votee_id, create_date FROM vote WHERE guild_id = $1 AND voter_id = $2 ORDER BY create_date DESC LIMT 1`, channel.GuildID, authorID).Scan(&lastVoteeIDFromAuthor, &lastVoteTime); err != nil {
 		if err == sql.ErrNoRows {
 			lastVoteeIDFromAuthor = ""
 		} else {
-			return "", err
-		}
-	} else {
-		lastVoteTime, err = time.Parse(time.RFC3339Nano, lastVoteTimestamp)
-		if err != nil {
 			return "", err
 		}
 	}
@@ -534,12 +517,10 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 	}
 
 	var karma int
-	err = sqlClient.QueryRow("select Karma from UserKarma where GuildId = ? and UserId = ?", channel.GuildID, userID).Scan(&karma)
-	if err != nil {
+	if err := sqlClient.QueryRow(`SELECT karma FROM user_karma WHERE guild_id = $1 AND user_id = $2`, channel.GuildID, userID).Scan(&karma); err != nil {
 		if err == sql.ErrNoRows {
 			karma = 0
-			_, insertErr := sqlClient.Exec("insert into UserKarma(GuildId, UserId, Karma) values (?, ?, ?)", channel.GuildID, userID, karma)
-			if insertErr != nil {
+			if _, err := sqlClient.Exec(`INSERT INTERO user_karma(guild_id, user_id, karma) VALUES ($1, $2, $3)`, channel.GuildID, userID, karma); err != nil {
 				return "", err
 			}
 		} else {
@@ -548,8 +529,7 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 	}
 
 	karma += inc
-	_, err = sqlClient.Exec("update UserKarma set Karma = ? where GuildId = ? and UserId = ?", karma, channel.GuildID, userID)
-	if err != nil {
+	if _, err := sqlClient.Exec(`UPDATE user_karma SET karma = $1 WHERE guild_id = $2 AND user_id = $3`, karma, channel.GuildID, userID); err != nil {
 		return "", err
 	}
 	voteTime[authorID] = time.Now()
@@ -562,9 +542,8 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if inc > 0 {
 		isUpvote = true
 	}
-	_, err = sqlClient.Exec("insert into Vote(GuildId, MessageId, VoterID, VoteeID, Timestamp, IsUpvote) values (?, ?, ?, ?, ?, ?)",
-		channel.GuildID, messageIDUnit, authorID, userID, time.Now().Format(time.RFC3339Nano), isUpvote)
-	if err != nil {
+	if _, err := sqlClient.Exec(`INSERT INTO vote(guild_id, message_id, voter_id, votee_id, is_upvote) values ($1, $2, $3, $4, $5`,
+		channel.GuildID, messageIDUnit, authorID, userID, isUpvote); err != nil {
 		return "", err
 	}
 	return "", nil
@@ -593,7 +572,7 @@ func votes(session *discordgo.Session, chanID, authorID, messageID string, args 
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query("select UserId, Karma from UserKarma where GuildId = ? order by Karma desc limit ?", channel.GuildID, limit)
+	rows, err := sqlClient.Query(`SELECT user_id, karma FROM user_karma WHERE guild_id = $1 ORDER BY karma DESC LIMIT $2`, channel.GuildID, limit)
 	if err != nil {
 		return "", err
 	}
@@ -636,7 +615,7 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query("select UserId, Money from UserMoney where GuildId = ? order by Money desc limit ?", channel.GuildID, limit)
+	rows, err := sqlClient.Query(`SELECT user_id, money FROM user_money WHERE guild_id = $1 ORDER BY money DESC LIMIT $2`, channel.GuildID, limit)
 	if err != nil {
 		return "", err
 	}
@@ -736,7 +715,7 @@ func top(session *discordgo.Session, chanID, authorID, messageID string, args []
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`select AuthorId, count(AuthorId) as NumMessages from Message where ChanId = ? and Content not like '/%' group by AuthorId order by count(AuthorId) desc limit ?`, chanID, limit)
+	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) AS num_messages FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' GROUP BY author_id ORDER BY count(author_id) DESC LIMIT $2`, chanID, limit)
 	if err != nil {
 		return "", err
 	}
@@ -775,7 +754,7 @@ func topLength(session *discordgo.Session, chanID, authorID, messageID string, a
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`select AuthorId, Content from Message where ChanId = ? and Content not like '/%' and trim(Content) != ''`, chanID)
+	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' AND trim(content) != ''`, chanID)
 	if err != nil {
 		return "", err
 	}
@@ -824,20 +803,14 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 		return "", err
 	}
 	newUsername := strings.Join(args[0:], " ")
-	var timestamp string
 	var lockedMinutes int
 	var lastChangeTime time.Time
 	now := time.Now()
-	if err := sqlClient.QueryRow("select Timestamp, LockedMinutes from OwnUsername where GuildId = ? order by Timestamp desc limit 1", channel.GuildID).Scan(&timestamp, &lockedMinutes); err != nil {
+	if err := sqlClient.QueryRow(`SELECT create_date, locked_minutes FROM own_username WHERE guild_id = $1 ORDER BY create_date DESC LIMIT 1`, channel.GuildID).Scan(&lastChangeTime, &lockedMinutes); err != nil {
 		if err == sql.ErrNoRows {
 			lockedMinutes = 0
 		} else {
 			return "", err
-		}
-	} else {
-		lastChangeTime, err = time.Parse(time.RFC3339Nano, timestamp)
-		if err != nil {
-			lastChangeTime = time.Now()
 		}
 	}
 
@@ -851,8 +824,7 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 			return "", err
 		}
 		var authorKarma int
-		err = sqlClient.QueryRow("select Karma from UserKarma where GuildId = ? and UserId = ?", channel.GuildID, authorID).Scan(&authorKarma)
-		if err != nil {
+		if err := sqlClient.QueryRow(`SELECT karma FROM user_karma WHERE guild_id = $1 AND user_id = $2`, channel.GuildID, authorID).Scan(&authorKarma); err != nil {
 			authorKarma = 0
 		}
 		newLockedMinutes := Rand.Intn(30) + 45 + 10*authorKarma
@@ -860,9 +832,8 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 			newLockedMinutes = 30
 		}
 
-		_, err = sqlClient.Exec("INSERT INTO ownUsername (AuthorId, Timestamp, Username, LockedMinutes, GuildId) values (?, ?, ?, ?, ?)",
-			authorID, now.Format(time.RFC3339Nano), newUsername, newLockedMinutes, channel.GuildID)
-		if err != nil {
+		if _, err := sqlClient.Exec(`INSERT INTO own_username (author_id, username, locked_minutes, guild_id) values ($1, $2, $3, $4)`,
+			authorID, newUsername, newLockedMinutes, channel.GuildID); err != nil {
 			return "", err
 		}
 		author, err := getUser(session, authorID)
@@ -916,27 +887,21 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if online {
 		return fmt.Sprintf("%s is currently online", user.Username), nil
 	}
-	var lastOnlineStr, offlineStr string
-	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and Presence = 'online' order by Timestamp desc limit 1", guild.ID, userID).Scan(&lastOnlineStr)
-	if err != nil {
+	var lastOnline time.Time
+	if err := sqlClient.QueryRow(`SELECT create_date FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND presence = 'online' ORDER BY create_date DESC LIMIT 1`, guild.ID, userID).Scan(&lastOnline); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("%s was last seen at least %.f days ago", user.Username, time.Since(time.Date(2016, 4, 7, 1, 7, 0, 0, time.Local)).Hours()/24), nil
 		}
 		return "", err
 	}
-	err = sqlClient.QueryRow("select Timestamp from UserPresence where GuildId = ? and UserId = ? and Presence != 'online' and Timestamp > ? order by Timestamp asc limit 1", guild.ID, userID, lastOnlineStr).Scan(&offlineStr)
-	if err != nil {
+	var offline time.Time
+	if err := sqlClient.QueryRow(`SELECT create_date FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND presence != 'online' AND create_date > $3 ORDER BY create_date ASC LIMIT 1`, guild.ID, userID, lastOnline).Scan(&offline); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("%s is currently online", user.Username), nil
 		}
 		return "", err
 	}
-	offline, err := time.Parse(time.RFC3339Nano, offlineStr)
-	if err != nil {
-		return "", err
-	}
-	timeSince := time.Since(offline)
-	lastSeenStr := timeSinceStr(timeSince)
+	lastSeenStr := timeSinceStr(time.Since(offline))
 	return fmt.Sprintf("%s was last seen %s ago", user.Username, lastSeenStr), nil
 }
 
@@ -1033,15 +998,14 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 		outStr = match[1] + match[2]
 	}
 	var numRows int64
-	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and AuthorId = ?;`, "%"+outStr+"%", userID).Scan(&numRows)
-	if err != nil {
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), userID).Scan(&numRows); err != nil {
 		return "", err
 	}
 	freshStr := "stale meme :-1:"
 	if numRows == 0 {
 		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
 	}
-	res, err := sqlClient.Exec(`insert into DiscordQuote(ChanId, AuthorId, Content, Score, IsFresh) values (?, ?, ?, ?, ?)`, chanID, userID, outStr, 0, numRows == 0)
+	res, err := sqlClient.Exec(`INSERT INTO discord_quote(chan_id, author_id, content, score, is_fresh) VALUES ($1, $2, $3, 0, $4)`, chanID, userID, outStr, numRows == 0)
 	if err != nil {
 		fmt.Println("ERROR inserting into DiscordQuote ", err.Error())
 	} else {
@@ -1076,15 +1040,14 @@ func spamdiscord(session *discordgo.Session, chanID, authorID, messageID string,
 		outStr = match[1] + match[2]
 	}
 	var numRows int64
-	err = sqlClient.QueryRow(`select Count(Id) from Message where Content like ? and ChanId = ? and AuthorId != ?;`, "%"+outStr+"%", chanID, ownUserID).Scan(&numRows)
-	if err != nil {
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2 AND author_id != $3`, fmt.Sprintf("%%%s%%", outStr), chanID, ownUserID).Scan(&numRows); err != nil {
 		return "", err
 	}
 	freshStr := "stale meme :-1:"
 	if numRows == 0 {
 		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
 	}
-	res, err := sqlClient.Exec(`insert into DiscordQuote(ChanId, AuthorId, Content, Score, IsFresh) values (?, ?, ?, ?, ?)`, chanID, nil, outStr, 0, numRows == 0)
+	res, err := sqlClient.Exec(`INSERT INTO discord_quote(chan_id, content, score, is_fresh) values ($1, $2, 0, $3)`, chanID, outStr, numRows == 0)
 	if err != nil {
 		fmt.Println("ERROR inserting into DiscordQuote ", err.Error())
 	} else {
@@ -1256,8 +1219,7 @@ func upquote(session *discordgo.Session, chanID, authorID, messageID string, arg
 			return "You've already upquoted my last spam", nil
 		}
 	}
-	_, err := sqlClient.Exec(`update DiscordQuote set Score = Score + 1 WHERE Id = ?`, lastQuoteID)
-	if err != nil {
+	if _, err := sqlClient.Exec(`UPDATE discord_quote SET score = score + 1 WHERE id = $1`, lastQuoteID); err != nil {
 		return "", err
 	}
 	userIDUpQuotes[chanID] = append(userIDUpQuotes[chanID], authorID)
@@ -1275,7 +1237,7 @@ func topquote(session *discordgo.Session, chanID, authorID, messageID string, ar
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`select AuthorId, Content, Score from DiscordQuote where ChanId = ? and Score > 0 order by Score desc limit ?`, chanID, limit)
+	rows, err := sqlClient.Query(`SELECT author_id, content, score FROM discord_quote WHERE chan_id = $1 AND score > 0 ORDER BY score DESC LIMIT $2`, chanID, limit)
 	if err != nil {
 		return "", err
 	}
@@ -1323,7 +1285,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`select AuthorId, Content from Message where ChanId = ? and Content not like '/%'`, chanID)
+	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%'`, chanID)
 	if err != nil {
 		return "", err
 	}
@@ -1371,8 +1333,7 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 	var counts UserMessageLengths
 	for authorID, score := range countMap {
 		var numMessages int64
-		err := sqlClient.QueryRow(`select count(Id) from Message where ChanId = ? and AuthorId = ? and Content not like '/%'`, chanID, authorID).Scan(&numMessages)
-		if err != nil {
+		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1 AND author_id = $2 AND content NOT LIKE '/%'`, chanID, authorID).Scan(&numMessages); err != nil {
 			return "", err
 		}
 		counts = append(counts, UserMessageLength{authorID, float64(score) / float64(numMessages)})
@@ -1508,8 +1469,7 @@ func remindme(session *discordgo.Session, chanID, authorID, messageID string, ar
 		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
 		return responses[Rand.Intn(len(responses))], nil
 	}
-	_, err = sqlClient.Exec("INSERT INTO Reminder (ChanId, AuthorId, Time, Content) values (?, ?, ?, ?)", chanID, authorID, remindTime.In(time.FixedZone("UTC", 0)).Format(time.RFC3339), content)
-	if err != nil {
+	if _, err := sqlClient.Exec(`INSERT INTO reminder (chan_id, author_id, send_time, content) VALUES ($1, $2, $3, $4)`, chanID, authorID, remindTime.In(time.FixedZone("UTC", 0)), content); err != nil {
 		return "", err
 	}
 	time.AfterFunc(remindTime.Sub(now), func() { session.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
@@ -1519,8 +1479,7 @@ func remindme(session *discordgo.Session, chanID, authorID, messageID string, ar
 func meme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	var opID, link string
 	for {
-		err := sqlClient.QueryRow(`SELECT AuthorId, Content FROM Message WHERE ChanId = ? AND (Content LIKE 'http://%' OR Content LIKE 'https://%') AND AuthorId != ? ORDER BY RANDOM() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link)
-		if err != nil {
+		if err := sqlClient.QueryRow(`SELECT author_id, content FROM message WHERE chan_id = $1 AND (content LIKE 'http://%' OR content LIKE 'https://%') AND author_id != $2 ORDER BY random() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link); err != nil {
 			return "", err
 		}
 		res, err := http.Head(link)
@@ -1625,36 +1584,28 @@ func lastUserMessage(session *discordgo.Session, chanID, authorID, messageID str
 	if member.User == nil {
 		return "", errors.New("No user found")
 	}
-	var timestamp string
-	err = sqlClient.QueryRow("SELECT Timestamp FROM Message WHERE ChanId = ? AND AuthorId = ? ORDER BY Timestamp DESC LIMIT 1", chanID, userID).Scan(&timestamp)
-	if err != nil {
+	var timeSent time.Time
+	if err := sqlClient.QueryRow("SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date DESC LIMIT 1", chanID, userID).Scan(&timeSent); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("I've never seen %s say anything.", member.User.Username), nil
 		}
 		return "", err
 	}
-	timeSent, err := time.Parse(time.RFC3339Nano, timestamp)
-	if err != nil {
-		return "", err
-	}
-	timeSince := timeSinceStr(time.Now().Sub(timeSent))
+	timeSince := timeSinceStr(time.Since(timeSent))
 	return fmt.Sprintf("%s sent their last message %s ago", member.User.Username, timeSince), nil
 }
 
 func reminders(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	rows, err := sqlClient.Query("SELECT AuthorId, Time, Content FROM Reminder WHERE ChanId = ? AND Time > ? ORDER BY Time ASC", chanID, time.Now().In(time.FixedZone("UTC", 0)).Format(time.RFC3339Nano))
+	rows, err := sqlClient.Query(`SELECT author_id, send_time, content FROM reminder WHERE chan_id = $1 AND send_time > now() ORDER BY send_time ASC`, chanID)
 	if err != nil {
 		return "", err
 	}
 	defer rows.Close()
 	message := ""
 	for rows.Next() {
-		var authorID, content, timestamp string
-		err = rows.Scan(&authorID, &timestamp, &content)
-		if err != nil {
-			return "", err
-		}
-		remindTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		var authorID, content string
+		var remindTime time.Time
+		err = rows.Scan(&authorID, &remindTime, &content)
 		if err != nil {
 			return "", err
 		}
@@ -1763,11 +1714,11 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 			if err != nil {
 				return "", err
 			}
-			rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId = ? ORDER BY Timestamp ASC", channel.GuildID, userID)
+			rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id = $2 ORDER BY create_date ASC`, channel.GuildID, userID)
 		}
 	}
 	if rows == nil {
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND UserId != ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID, musicBotID)
+		rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id != $2 AND user_id != $3 ORDER BY create_date ASC`, channel.GuildID, ownUserID, musicBotID)
 	}
 	if err != nil {
 		return "", err
@@ -1870,11 +1821,11 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 			if err != nil {
 				return "", err
 			}
-			rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId = ? AND Timestamp > ? ORDER BY Timestamp ASC", channel.GuildID, userID, startTime.Format(time.RFC3339))
+			rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND create_date > $3 ORDER BY create_date ASC`, channel.GuildID, userID, startTime)
 		}
 	}
 	if rows == nil {
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND UserId != ? AND Timestamp > ? ORDER BY Timestamp ASC", channel.GuildID, ownUserID, musicBotID, startTime.Format(time.RFC3339))
+		rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id != $2 AND user_id != $3 AND create_date > $4 ORDER BY create_date ASC`, channel.GuildID, ownUserID, musicBotID, startTime)
 	}
 	if err != nil {
 		return "", err
@@ -1923,9 +1874,9 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 			return "", nil
 		}
 		username = user.Username
-		rows, err = sqlClient.Query("SELECT Timestamp FROM MESSAGE WHERE ChanId = ? AND AuthorId = ? ORDER BY Timestamp asc", chanID, userID)
+		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date ASC`, chanID, userID)
 	} else {
-		rows, err = sqlClient.Query("SELECT Timestamp FROM MESSAGE WHERE ChanId = ? AND AuthorId != ? ORDER BY Timestamp asc", chanID, ownUserID)
+		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id != $2 ORDER BY create_date ASC`, chanID, ownUserID)
 	}
 	if err != nil {
 		return "", err
@@ -1938,12 +1889,11 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	hourCount := make([]uint64, 24)
 	var firstTime, msgTime time.Time
 	if rows.Next() {
-		var timestamp string
-		err = rows.Scan(&timestamp)
+		var firstTime time.Time
+		err = rows.Scan(&firstTime)
 		if err != nil {
 			return "", err
 		}
-		firstTime, err = time.Parse(time.RFC3339Nano, timestamp)
 		firstTime = firstTime.Local()
 		if err != nil {
 			return "", err
@@ -1951,12 +1901,10 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 		hourCount[firstTime.Hour()]++
 	}
 	for rows.Next() {
-		var timestamp string
-		err = rows.Scan(&timestamp)
+		err = rows.Scan(&msgTime)
 		if err != nil {
 			return "", err
 		}
-		msgTime, err = time.Parse(time.RFC3339Nano, timestamp)
 		msgTime = msgTime.Local()
 		if err != nil {
 			return "", err
@@ -2403,7 +2351,7 @@ func topcommand(session *discordgo.Session, chanID, authorID, messageID string, 
 	if len(args) < 1 {
 		return "", errors.New("No command provided")
 	}
-	rows, err := sqlClient.Query(`SELECT AuthorId, COUNT(AuthorId) FROM Message WHERE Content LIKE ? AND ChanId = ? GROUP BY AuthorId ORDER BY COUNT(AuthorId) DESC`, fmt.Sprintf(`/%s%%`, args[0]), chanID)
+	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) FROM message WHERE content LIKE $1 AND chan_id = $2 GROUP BY author_id ORDER BY count(author_id) DESC`, fmt.Sprintf(`/%s%%`, args[0]), chanID)
 	if err != nil {
 		return "", err
 	}
@@ -2438,10 +2386,10 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 	var enteredGame string
 	if len(args) > 0 {
 		enteredGame = strings.Join(args, " ")
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? AND (LOWER(Game) = ? OR Game = '') ORDER BY Timestamp asc", guild.ID, ownUserID, strings.ToLower(enteredGame))
+		rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence  WHERE guild_id = $1 AND user_id != $2 AND (lower(game) = $3 OR game = '') ORDER BY create_date ASC`, guild.ID, ownUserID, strings.ToLower(enteredGame))
 	} else {
 		enteredGame = "All Games"
-		rows, err = sqlClient.Query("SELECT UserId, Timestamp, Game FROM UserPresence WHERE GuildId = ? AND UserId != ? ORDER BY Timestamp asc", guild.ID, ownUserID)
+		rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id != $2 ORDER BY create_date ASC`, guild.ID, ownUserID)
 	}
 	if err != nil {
 		return "", err
@@ -2452,12 +2400,9 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 	userGame := make(map[string]string)
 	firstTime := time.Now()
 	for rows.Next() {
-		var userID, timestamp, game string
-		err := rows.Scan(&userID, &timestamp, &game)
-		if err != nil {
-			return "", err
-		}
-		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
+		var userID, game string
+		var currTime time.Time
+		err := rows.Scan(&userID, &currTime, &game)
 		if err != nil {
 			return "", err
 		}
@@ -2621,20 +2566,15 @@ func lastPlayed(session *discordgo.Session, chanID, authorID, messageID string, 
 	if game != nil {
 		return fmt.Sprintf("%s is currently playing %s", user.Username, game.Name), nil
 	}
-	var lastPlayedTime, lastPlayedGame string
-	err = sqlClient.QueryRow("select Timestamp, Game from UserPresence where GuildId = ? and UserId = ? and Game != '' order by Timestamp desc limit 1", guild.ID, userID).Scan(&lastPlayedTime, &lastPlayedGame)
-	if err != nil {
+	var lastPlayedGame string
+	var lastPlayed time.Time
+	if err := sqlClient.QueryRow(`SELECT create_date, game FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND game != '' ORDER BY create_date DESC LIMIT 1`, guild.ID, userID).Scan(&lastPlayed, &lastPlayedGame); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("I've never seen %s play anything...", user.Username), nil
 		}
 		return "", err
 	}
-	lastPlayed, err := time.Parse(time.RFC3339Nano, lastPlayedTime)
-	if err != nil {
-		return "", err
-	}
-	timeSince := time.Since(lastPlayed)
-	lastSeenStr := timeSinceStr(timeSince)
+	lastSeenStr := timeSinceStr(time.Since(lastPlayed))
 	return fmt.Sprintf("%s last played %s %s ago", user.Username, lastPlayedGame, lastSeenStr), nil
 }
 
@@ -2783,7 +2723,7 @@ func topOnline(session *discordgo.Session, chanID, authorID, messageID string, a
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query("SELECT UserId, Presence = 'online' as Online, Timestamp FROM UserPresence WHERE GuildId = ? AND (Presence = 'online' OR Presence = 'offline') AND Timestamp > '2016-08-30'", channel.GuildID)
+	rows, err := sqlClient.Query(`SELECT user_id, presence = 'online' AS online, create_date FROM user_presence WHERE guild_id = $1 AND (presence = 'online' OR presence = 'offline') AND create_date > '2016-08-30'`, channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -2793,13 +2733,10 @@ func topOnline(session *discordgo.Session, chanID, authorID, messageID string, a
 	var maxTime time.Time
 	var maxUserOnline []string
 	for rows.Next() {
-		var userID, timestamp string
+		var userID string
+		var currTime time.Time
 		var online bool
-		if err := rows.Scan(&userID, &online, &timestamp); err != nil {
-			return "", err
-		}
-		currTime, err := time.Parse(time.RFC3339Nano, timestamp)
-		if err != nil {
+		if err := rows.Scan(&userID, &online, &currTime); err != nil {
 			return "", err
 		}
 		if lastOnline, found := userOnline[userID]; found {
@@ -2882,8 +2819,7 @@ func track(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 
 	if status.TrackingStatus.Status != "DELIVERED" && status.TrackingStatus.Status != "FAILURE" {
-		_, err = sqlClient.Exec("INSERT INTO Shipment(Carrier, TrackingNumber, ChanId, AuthorId) VALUES (?, ?, ?, ?)", status.Carrier, status.TrackingNumber, chanID, authorID)
-		if err != nil {
+		if _, err := sqlClient.Exec(`INSERT INTO shipment(carrier, tracking_number, chan_id, author_id) VALUES ($1, $2, $3, $4)`, status.Carrier, status.TrackingNumber, chanID, authorID); err != nil {
 			fmt.Println("ERROR insert into Shipment", err)
 		}
 	}
@@ -2937,8 +2873,8 @@ func gtext(session *discordgo.Session, chanID, authorID, messageID string, args 
 
 func greentext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	numMessages := Rand.Intn(5) + 3
-	rows, err := sqlClient.Query(fmt.Sprintf(`SELECT Content FROM Message WHERE ChanId = ? AND AuthorId != ? AND LENGTH(Content) > 0 AND Content NOT LIKE '%%
-%%' ORDER BY RANDOM() LIMIT %d`, numMessages), chanID, ownUserID)
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id != $2 AND length(content) > 0 AND content NOT LIKE '%
+%' ORDER BY random() LIMIT $3`, chanID, ownUserID, numMessages)
 	if err != nil {
 		return "", err
 	}
@@ -2992,15 +2928,11 @@ func greentext(session *discordgo.Session, chanID, authorID, messageID string, a
 
 func totalMessages(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	var messages uint64
-	if err := sqlClient.QueryRow("SELECT COUNT(id) FROM Message WHERE ChanId = ?", chanID).Scan(&messages); err != nil {
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1`, chanID).Scan(&messages); err != nil {
 		return "", err
 	}
-	var timestamp string
-	if err := sqlClient.QueryRow("SELECT Timestamp FROM Message WHERE ChanId = ? ORDER BY Timestamp ASC LIMIT 1", chanID).Scan(&timestamp); err != nil {
-		return "", err
-	}
-	firstTime, err := time.Parse(time.RFC3339Nano, timestamp)
-	if err != nil {
+	var firstTime time.Time
+	if err := sqlClient.QueryRow(`SELECT create_date FROM message WHERE chan_id = $1 ORDER BY create_date ASC LIMIT 1`, chanID).Scan(&firstTime); err != nil {
 		return "", err
 	}
 	timeSince := time.Since(firstTime)
@@ -3258,9 +3190,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println("ERROR parsing message ID " + err.Error())
 			return
 		}
-		_, err = sqlClient.Exec("INSERT INTO Message (Id, ChanId, AuthorId, Timestamp, Content) values (?, ?, ?, ?, ?)",
-			messageID, m.ChannelID, m.Author.ID, now.Format(time.RFC3339Nano), m.Content)
-		if err != nil {
+		if _, err = sqlClient.Exec(`INSERT INTO message (id, chan_id, author_id, content) VALUES ($1, $2, $3, $4)`,
+			messageID, m.ChannelID, m.Author.ID, m.Content); err != nil {
 			fmt.Println("ERROR inserting into Message")
 			fmt.Println(err.Error())
 		}
@@ -3410,14 +3341,11 @@ func updateGame(s *discordgo.Session) {
 		fmt.Println("Error getting user guilds", err.Error())
 	}
 
-	now := time.Now()
-	err = s.UpdateStatus(0, currentGame)
-	if err != nil {
+	if err := s.UpdateStatus(0, currentGame); err != nil {
 		fmt.Println("ERROR updating game: ", err.Error())
 	}
 	for _, guild := range userGuilds {
-		_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "online", currentGame)
-		if err != nil {
+		if _, err := sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'online', $3)`, guild.ID, ownUserID, currentGame); err != nil {
 			fmt.Println("ERROR inserting self into UserPresence DB")
 			fmt.Println(err.Error())
 		}
@@ -3425,7 +3353,6 @@ func updateGame(s *discordgo.Session) {
 }
 
 func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
-	now := time.Now()
 	if p.User == nil {
 		return
 	}
@@ -3443,8 +3370,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	} else {
 		fmt.Printf("%20s %20s %20s : %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
 	}*/
-	_, err := sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", p.GuildID, p.User.ID, now.Format(time.RFC3339Nano), p.Status, gameName)
-	if err != nil {
+	if _, err := sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, p.GuildID, p.User.ID, p.Status, gameName); err != nil {
 		fmt.Println("ERROR insert into UserPresence DB")
 		fmt.Println(err.Error())
 	}
@@ -3464,9 +3390,8 @@ func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
 }
 
 func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-	_, err := sqlClient.Exec("INSERT INTO VoiceState (GuildId, ChanId, UserId, SessionId, Deaf, Mute, SelfDeaf, SelfMute, Suppress, Timestamp) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		v.GuildID, v.ChannelID, v.UserID, v.SessionID, v.Deaf, v.Mute, v.SelfDeaf, v.SelfMute, v.Suppress, time.Now().Format(time.RFC3339Nano))
-	if err != nil {
+	if _, err := sqlClient.Exec(`INSERT INTO voice_state (guild_id, chan_id, user_id, session_id, deaf, mute, self_deaf, self_mute, suppress) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		v.GuildID, v.ChannelID, v.UserID, v.SessionID, v.Deaf, v.Mute, v.SelfDeaf, v.SelfMute, v.Suppress); err != nil {
 		fmt.Println("ERROR insert into VoiceState: ", err.Error())
 	}
 	if timeoutTime, found := timeoutedUserIDs[v.UserID]; found {
@@ -3510,8 +3435,7 @@ func handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 		fmt.Println("ERROR parsing message ID " + err.Error())
 		return
 	}
-	_, err = sqlClient.Exec("INSERT INTO MessageDelete (MessageId) values (?)", messageID)
-	if err != nil {
+	if _, err = sqlClient.Exec(`INSERT INTO message_delete (message_id) VALUES ($1)`, messageID); err != nil {
 		fmt.Println("ERROR recording MessageDelete", err.Error())
 		return
 	}
@@ -3599,8 +3523,7 @@ func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
 }
 
 func normalizeKarma() {
-	_, err := sqlClient.Exec("UPDATE UserKarma SET Karma = MAX(Karma / 3, 0)")
-	if err != nil {
+	if _, err := sqlClient.Exec(`UPDATE user_karma SET karma = max(karma / 3, 0)`); err != nil {
 		fmt.Println(err.Error())
 	}
 	now := time.Now()
@@ -3612,7 +3535,7 @@ func giveAllowance() {
 	now := time.Now()
 	nextRun := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
 	time.AfterFunc(nextRun.Sub(now), giveAllowance)
-	rows, err := sqlClient.Query("SELECT GuildId, UserId FROM UserMoney")
+	rows, err := sqlClient.Query(`SELECT guild_id, user_id FROM user_money`)
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -3628,8 +3551,7 @@ func giveAllowance() {
 			return
 		}
 		var karma int
-		err = sqlClient.QueryRow("SELECT Karma FROM UserKarma WHERE GuildId = ? AND UserId = ?", guildID, userID).Scan(&karma)
-		if err != nil {
+		if err := sqlClient.QueryRow(`SELECT karma FROM user_karma WHERE guild_id = $1 AND user_id = $2`, guildID, userID).Scan(&karma); err != nil {
 			if err == sql.ErrNoRows {
 				karma = 0
 			} else {
@@ -3645,8 +3567,7 @@ func giveAllowance() {
 		userIDs = append(userIDs, userID)
 	}
 	for i := range karmas {
-		_, err = sqlClient.Exec("UPDATE UserMoney SET Money = Money + ? WHERE GuildId = ? AND UserId = ?", math.Max(3, 3+0.2*float64(karmas[i])), guildIDs[i], userIDs[i])
-		if err != nil {
+		if _, err = sqlClient.Exec(`UPDATE user_money SET money = money + $1 WHERE guild_id = $2 AND user_id = $3`, math.Max(3, 3+0.2*float64(karmas[i])), guildIDs[i], userIDs[i]); err != nil {
 			fmt.Println(err.Error())
 			return
 		}
@@ -3655,7 +3576,7 @@ func giveAllowance() {
 
 func checkShipments(s *discordgo.Session) {
 	defer time.AfterFunc(5*time.Minute, func() { checkShipments(s) })
-	rows, err := sqlClient.Query("SELECT Id, Carrier, TrackingNumber, ChanId, AuthorId FROM Shipment")
+	rows, err := sqlClient.Query(`SELECT id, carrier, tracking_number, chan_id, author_id FROM shipment`)
 	if err != nil {
 		fmt.Println("ERROR selecting from shipment", err)
 	}
@@ -3692,7 +3613,7 @@ func checkShipments(s *discordgo.Session) {
 		fmt.Println("ERROR calling next on rows", err)
 	}
 	for _, ID := range toDelete {
-		if _, err := sqlClient.Exec("DELETE FROM Shipment WHERE Id = ?", ID); err != nil {
+		if _, err := sqlClient.Exec(`DELETE FROM shipment WHERE id = $1`, ID); err != nil {
 			fmt.Println("ERROR removing shipment", err)
 			continue
 		}
@@ -3701,7 +3622,7 @@ func checkShipments(s *discordgo.Session) {
 
 func main() {
 	var err error
-	sqlClient, err = sql.Open("sqlite3", "sqlite.db")
+	sqlClient, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s", dbUser, dbPass, dbHost, dbPort, dbName, dbSslMode))
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -3751,7 +3672,6 @@ func main() {
 	if err != nil {
 		fmt.Println("Error starting transaction", err.Error())
 	} else {
-		now := time.Now()
 		for _, guild := range userGuilds {
 			guild, err = client.Guild(guild.ID)
 			if err != nil {
@@ -3764,17 +3684,15 @@ func main() {
 				if presence.Game != nil {
 					gameName = presence.Game.Name
 				}
-				_, err := tran.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, presence.User.ID, now.Format(time.RFC3339Nano), presence.Status, gameName)
-				if err != nil {
-					fmt.Println("ERROR inserting into UserPresence DB", err.Error())
+				if _, err := tran.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, guild.ID, presence.User.ID, presence.Status, gameName); err != nil {
+					fmt.Println("ERROR inserting into user_presence", err.Error())
 				}
 				userMap[presence.User.ID] = true
 			}
 			for _, member := range guild.Members {
 				if _, found := userMap[member.User.ID]; !found {
-					_, err := tran.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, member.User.ID, now.Format(time.RFC3339Nano), "offline", "")
-					if err != nil {
-						fmt.Println("ERROR inserting into UserPresence DB", err.Error())
+					if _, err := tran.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guild.ID, member.User.ID); err != nil {
+						fmt.Println("ERROR inserting into user_presence", err.Error())
 					}
 				}
 			}
@@ -3798,9 +3716,8 @@ func main() {
 			}
 			client.Logout()
 			client.Close()
-			now := time.Now()
 			for _, guild := range userGuilds {
-				sqlClient.Exec("INSERT INTO UserPresence (GuildId, UserId, Timestamp, Presence, Game) values (?, ?, ?, ?, ?)", guild.ID, ownUserID, now.Format(time.RFC3339Nano), "offline", "")
+				sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guild.ID, ownUserID)
 			}
 			os.Exit(0)
 		}
@@ -3810,20 +3727,16 @@ func main() {
 	go initGameUpdater(client)
 
 	now := time.Now()
-	rows, err := sqlClient.Query("select ChanId, AuthorId, Time, Content from Reminder where Time > ?", now.In(time.FixedZone("UTC", 0)).Format(time.RFC3339))
+	rows, err := sqlClient.Query("SELECT chan_id, author_id, send_time, content FROM reminder WHERE send_time > now()")
 	if err != nil {
 		fmt.Println("ERROR setting reminders", err)
 	}
 	for rows.Next() {
-		var chanID, authorID, timeStr, content string
-		err := rows.Scan(&chanID, &authorID, &timeStr, &content)
+		var chanID, authorID, content string
+		var reminderTime time.Time
+		err := rows.Scan(&chanID, &authorID, &reminderTime, &content)
 		if err != nil {
 			fmt.Println("ERROR setting reminder", err)
-			continue
-		}
-		reminderTime, err := time.Parse(time.RFC3339, timeStr)
-		if err != nil {
-			fmt.Println("ERROR getting reminder time", err)
 			continue
 		}
 		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
