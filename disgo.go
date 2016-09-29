@@ -819,13 +819,16 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 	if len(args) < 1 {
 		return "", errors.New("No new username provided")
 	}
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	newUsername := strings.Join(args[0:], " ")
 	var timestamp string
 	var lockedMinutes int
 	var lastChangeTime time.Time
 	now := time.Now()
-	err := sqlClient.QueryRow("select Timestamp, LockedMinutes from OwnUsername order by Timestamp desc limit 1").Scan(&timestamp, &lockedMinutes)
-	if err != nil {
+	if err := sqlClient.QueryRow("select Timestamp, LockedMinutes from OwnUsername where GuildId = ? order by Timestamp desc limit 1", channel.GuildID).Scan(&timestamp, &lockedMinutes); err != nil {
 		if err == sql.ErrNoRows {
 			lockedMinutes = 0
 		} else {
@@ -839,12 +842,7 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 	}
 
 	if lockedMinutes == 0 || now.After(lastChangeTime.Add(time.Duration(lockedMinutes)*time.Minute)) {
-		self, err := getUser(session, "@me")
-		if err != nil {
-			return "", err
-		}
-		newSelf, err := session.UserUpdate("", "", newUsername, self.Avatar, "")
-		if err != nil {
+		if err := session.GuildMemberNickname(channel.GuildID, "@me/nick", newUsername); err != nil {
 			return "", err
 		}
 
@@ -862,8 +860,8 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 			newLockedMinutes = 30
 		}
 
-		_, err = sqlClient.Exec("INSERT INTO ownUsername (AuthorId, Timestamp, Username, LockedMinutes) values (?, ?, ?, ?)",
-			authorID, now.Format(time.RFC3339Nano), newSelf.Username, newLockedMinutes)
+		_, err = sqlClient.Exec("INSERT INTO ownUsername (AuthorId, Timestamp, Username, LockedMinutes, GuildId) values (?, ?, ?, ?, ?)",
+			authorID, now.Format(time.RFC3339Nano), newUsername, newLockedMinutes, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
@@ -2550,7 +2548,8 @@ func invite(session *discordgo.Session, chanID, authorID, messageID string, args
 		discordgo.PermissionVoiceMoveMembers |
 		discordgo.PermissionCreateInstantInvite |
 		discordgo.PermissionKickMembers |
-		discordgo.PermissionManageChannels
+		discordgo.PermissionManageChannels |
+		0x4000000
 	return fmt.Sprintf("https://discordapp.com/oauth2/authorize?client_id=%s&scope=bot&permissions=0x%X", appID, neededPermissions), nil
 }
 
