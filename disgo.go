@@ -227,7 +227,7 @@ func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (
 	return maxUserID, nil
 }
 
-func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.Time, int, error) {
+func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.Time, int, float64, error) {
 	userGame := make(map[string]string)
 	userTime := make(map[string]time.Time)
 	gameTime := make(map[string]float64)
@@ -237,7 +237,7 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 		var currTime time.Time
 		err := rows.Scan(&userID, &currTime, &game)
 		if err != nil {
-			return make(UserMessageLengths, 0), time.Now(), 0, err
+			return make(UserMessageLengths, 0), time.Now(), 0, 0, err
 		}
 
 		if currTime.Before(firstTime) {
@@ -269,9 +269,11 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 		lastTime := userTime[userID]
 		gameTime[game] += now.Sub(lastTime).Hours()
 	}
+	totalTime := float64(0)
 	gameTimes := make(UserMessageLengths, 0)
 	for game, time := range gameTime {
 		gameTimes = append(gameTimes, UserMessageLength{game, time})
+		totalTime += time
 	}
 	sort.Sort(&gameTimes)
 	if limit > len(gameTimes) {
@@ -284,7 +286,7 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 			longestGameLength = len(game.AuthorID)
 		}
 	}
-	return gameTimes, firstTime, longestGameLength, nil
+	return gameTimes, firstTime, longestGameLength, totalTime, nil
 }
 
 func getBetSpaces(args []string, req int) ([]int, error) {
@@ -1725,13 +1727,9 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 	defer rows.Close()
 
-	gameTimes, firstTime, longestGameLength, err := getGameTimesFromRows(rows, limit)
+	gameTimes, firstTime, longestGameLength, totalTime, err := getGameTimesFromRows(rows, limit)
 	if err != nil {
 		return "", err
-	}
-	var totalTime float64
-	for _, gameTime := range gameTimes {
-		totalTime += gameTime.AvgLength
 	}
 
 	var message string
@@ -1832,13 +1830,9 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 	}
 	defer rows.Close()
 
-	gameTimes, _, longestGameLength, err := getGameTimesFromRows(rows, limit)
+	gameTimes, _, longestGameLength, totalTime, err := getGameTimesFromRows(rows, limit)
 	if err != nil {
 		return "", err
-	}
-	var totalTime float64
-	for _, gameTime := range gameTimes {
-		totalTime += gameTime.AvgLength
 	}
 
 	var message string
