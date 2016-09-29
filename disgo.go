@@ -1883,7 +1883,6 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	hourCount := make([]uint64, 24)
 	var firstTime, msgTime time.Time
 	if rows.Next() {
-		var firstTime time.Time
 		err = rows.Scan(&firstTime)
 		if err != nil {
 			return "", err
