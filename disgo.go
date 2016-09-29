@@ -3071,6 +3071,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 **spamuser** [username] - generates a message based on discord logs of <username>
 **spin** or **roulette** - spin roulette wheel
 **soda** - alias for /spam sodapoppin
+**source** - link to bot source code on github
 **top** [number (optional)] - displays top <number> users sorted by messages sent
 **topCommand** [command] - displays who has issued <command> most
 **topLength** [number (optional)] - dispalys top <number> users sorted by average words/message
