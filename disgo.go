@@ -507,7 +507,7 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "Really?...", nil
 	}
 	var lastVoteeIDFromAuthor string
-	if err := sqlClient.QueryRow(`SELECT votee_id, create_date FROM vote WHERE guild_id = $1 AND voter_id = $2 ORDER BY create_date DESC LIMT 1`, channel.GuildID, authorID).Scan(&lastVoteeIDFromAuthor, &lastVoteTime); err != nil {
+	if err := sqlClient.QueryRow(`SELECT votee_id, create_date FROM vote WHERE guild_id = $1 AND voter_id = $2 ORDER BY create_date DESC LIMIT 1`, channel.GuildID, authorID).Scan(&lastVoteeIDFromAuthor, &lastVoteTime); err != nil {
 		if err == sql.ErrNoRows {
 			lastVoteeIDFromAuthor = ""
 		} else {
@@ -544,7 +544,7 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if inc > 0 {
 		isUpvote = true
 	}
-	if _, err := sqlClient.Exec(`INSERT INTO vote(guild_id, message_id, voter_id, votee_id, is_upvote) values ($1, $2, $3, $4, $5`,
+	if _, err := sqlClient.Exec(`INSERT INTO vote(guild_id, message_id, voter_id, votee_id, is_upvote) values ($1, $2, $3, $4, $5)`,
 		channel.GuildID, messageIDUnit, authorID, userID, isUpvote); err != nil {
 		return "", err
 	}
@@ -981,7 +981,15 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if err != nil {
 		return "", err
 	}
-	err = exec.Command("bash", "./gen_custom_log.sh", chanID, userID).Run()
+	realChanID, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	realUserID, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	err = exec.Command("bash", "./gen_custom_log.sh", fmt.Sprintf("%d", realChanID), fmt.Sprintf("%d", realUserID)).Run()
 	if err != nil {
 		return "", err
 	}
@@ -1007,23 +1015,22 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 	if numRows == 0 {
 		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
 	}
-	res, err := sqlClient.Exec(`INSERT INTO discord_quote(chan_id, author_id, content, score, is_fresh) VALUES ($1, $2, $3, 0, $4)`, chanID, userID, outStr, numRows == 0)
-	if err != nil {
+	var quoteID int64
+	if err := sqlClient.QueryRow(`INSERT INTO discord_quote(chan_id, author_id, content, score, is_fresh) VALUES ($1, $2, $3, 0, $4) RETURNING id`, chanID, userID, outStr, numRows == 0).Scan(&quoteID); err != nil {
 		fmt.Println("ERROR inserting into DiscordQuote ", err.Error())
 	} else {
-		quoteID, err := res.LastInsertId()
-		if err != nil {
-			fmt.Println("ERROR getting DiscordQuote ID ", err.Error())
-		} else {
-			lastQuoteIDs[chanID] = quoteID
-			userIDUpQuotes[chanID] = make([]string, 0)
-		}
+		lastQuoteIDs[chanID] = quoteID
+		userIDUpQuotes[chanID] = make([]string, 0)
 	}
 	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, outStr), nil
 }
 
 func spamdiscord(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
-	err := exec.Command("bash", "./gen_custom_log_by_chan.sh", chanID).Run()
+	realChanID, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	err = exec.Command("bash", "./gen_custom_log_by_chan.sh", fmt.Sprintf("%d", realChanID)).Run()
 	if err != nil {
 		return "", err
 	}
@@ -1049,17 +1056,12 @@ func spamdiscord(session *discordgo.Session, chanID, authorID, messageID string,
 	if numRows == 0 {
 		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
 	}
-	res, err := sqlClient.Exec(`INSERT INTO discord_quote(chan_id, content, score, is_fresh) values ($1, $2, 0, $3)`, chanID, outStr, numRows == 0)
-	if err != nil {
+	var quoteID int64
+	if err := sqlClient.QueryRow(`INSERT INTO discord_quote(chan_id, content, score, is_fresh) values ($1, $2, 0, $3) RETURNING id`, chanID, outStr, numRows == 0).Scan(&quoteID); err != nil {
 		fmt.Println("ERROR inserting into DiscordQuote ", err.Error())
 	} else {
-		quoteID, err := res.LastInsertId()
-		if err != nil {
-			fmt.Println("ERROR getting DiscordQuote ID ", err.Error())
-		} else {
-			lastQuoteIDs[chanID] = quoteID
-			userIDUpQuotes[chanID] = make([]string, 0)
-		}
+		lastQuoteIDs[chanID] = quoteID
+		userIDUpQuotes[chanID] = make([]string, 0)
 	}
 	return fmt.Sprintf("%s\n%s", freshStr, outStr), nil
 }
