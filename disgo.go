@@ -1202,7 +1202,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(34)
+		suh := Rand.Intn(35)
 		if err != nil {
 			return "", err
 		}
@@ -1862,12 +1862,12 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 		} else {
 			userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
 			if err != nil {
-				return "", nil
+				return "", err
 			}
 		}
 		user, err := getUser(session, userID)
 		if err != nil {
-			return "", nil
+			return "", err
 		}
 		username = user.Username
 		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date ASC`, chanID, userID)
@@ -1937,7 +1937,7 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Hour"; set ylabel "Messages"; set yrange [0:%d]; set xrange [-1:24]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), uint64(math.Ceil(float64(maxPerHour)*1.1)), title, datapointsFile.Name())).Run()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	_, err = session.ChannelFileSend(chanID, plotFile.Name()+".png", plotFile)
 	if err != nil {
@@ -2013,7 +2013,7 @@ func roulette(session *discordgo.Session, chanID, authorID, messageID string, ar
 	var result RandomResponse
 	err = json.Unmarshal(body, &result)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	if strconv.Itoa(result.ID) != messageID {
 		return "", errors.New("ID mismatch")
@@ -2615,7 +2615,7 @@ func starbound(session *discordgo.Session, chanID, authorID, messageID string, a
 func permission(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	fmt.Printf("%X\n", perm)
 	session.ChannelMessageDelete(chanID, messageID)
@@ -2868,8 +2868,25 @@ func gtext(session *discordgo.Session, chanID, authorID, messageID string, args 
 
 func greentext(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	numMessages := Rand.Intn(5) + 3
-	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id != $2 AND length(content) > 0 AND content NOT LIKE '%
+	var rows *sql.Rows
+	var err error
+	if len(args) > 0 {
+		var userID string
+		var err error
+		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+			userID = match[1]
+		} else {
+			userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+			if err != nil {
+				return "", err
+			}
+		}
+		rows, err = sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id = $2 AND length(content) > 0 AND content NOT LIKE '%
+%' ORDER BY random() LIMIT $3`, chanID, userID, numMessages)
+	} else {
+		rows, err = sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id != $2 AND length(content) > 0 AND content NOT LIKE '%
 %' ORDER BY random() LIMIT $3`, chanID, ownUserID, numMessages)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -2892,7 +2909,7 @@ func greentext(session *discordgo.Session, chanID, authorID, messageID string, a
 	imageFile, err := ioutil.TempFile("", "disgoGreentext")
 	if err != nil {
 		fmt.Println(err)
-		return "", nil
+		return "", err
 	}
 	defer os.Remove(imageFile.Name())
 	if err = exec.Command(
@@ -2916,7 +2933,7 @@ func greentext(session *discordgo.Session, chanID, authorID, messageID string, a
 	_, err = session.ChannelFileSend(chanID, "text.png", imageFile)
 	if err != nil {
 		fmt.Println(err)
-		return "", nil
+		return "", err
 	}
 	return "", nil
 }
@@ -3043,13 +3060,13 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
-	commandRegexes := []*regexp.Regexp{regexp.MustCompile(`^<@` + ownUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
-	upvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*\+\+`)
-	downvoteRegex := regexp.MustCompile(`(<@\d+?>)\s*--`)
+	commandRegexes := []*regexp.Regexp{regexp.MustCompile(`^<@!` + ownUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
+	upvoteRegex := regexp.MustCompile(`(<@!?\d+?>)\s*\+\+`)
+	downvoteRegex := regexp.MustCompile(`(<@!?\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
 	//oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
-	questionRegex := regexp.MustCompile(`^<@` + ownUserID + `>.*\w+.*\?$`)
+	questionRegex := regexp.MustCompile(`^<@!` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
 	greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*(.+)$`)
