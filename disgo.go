@@ -1202,7 +1202,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(35)
+		suh := Rand.Intn(36)
 		if err != nil {
 			return "", err
 		}
@@ -3251,6 +3251,12 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 		}
 
+		for _, regex := range commandRegexes {
+			if match := regex.FindStringSubmatch(m.Content); match != nil {
+				executeCommand(s, m, strings.Fields(match[1]))
+				return
+			}
+		}
 		if match := questionRegex.FindString(m.Content); match != "" {
 			executeCommand(s, m, []string{"8ball"})
 			return
@@ -3283,12 +3289,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			executeCommand(s, m, []string{"oddshot", match})
 			return
 		}*/
-		for _, regex := range commandRegexes {
-			if match := regex.FindStringSubmatch(m.Content); match != nil {
-				executeCommand(s, m, strings.Fields(match[1]))
-				return
-			}
-		}
 		channel, err := s.State.Channel(m.ChannelID)
 		if err != nil {
 			fmt.Println("ERROR: ", err)
