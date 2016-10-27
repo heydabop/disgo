@@ -148,6 +148,7 @@ var (
 	userIDUpQuotes                    = make(map[string][]string)
 	voiceMutex                        sync.Mutex
 	voteTime                          = make(map[string]time.Time)
+	wasNicknamed                      = make(map[string]bool)
 )
 
 func timeSinceStr(timeSince time.Duration) string {
@@ -817,7 +818,9 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 	}
 
 	if lockedMinutes == 0 || now.After(lastChangeTime.Add(time.Duration(lockedMinutes)*time.Minute)) {
+		wasNicknamed[channel.GuildID] = true
 		if err := session.GuildMemberNickname(channel.GuildID, "@me/nick", newUsername); err != nil {
+			wasNicknamed[channel.GuildID] = false
 			return "", err
 		}
 
@@ -1187,6 +1190,10 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 	}
 	currentVoiceTimer = time.AfterFunc(30*time.Second, func() {
 		if currentVoiceSession != nil {
+			if Rand.Intn(3) == 0 {
+				dgvoice.PlayAudioFile(currentVoiceSession, "goodbye.mp3")
+				time.Sleep(1 * time.Second)
+			}
 			dgvoice.KillPlayer()
 			err := currentVoiceSession.Disconnect()
 			currentVoiceSession = nil
@@ -1202,10 +1209,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(36)
-		if err != nil {
-			return "", err
-		}
+		suh := Rand.Intn(38)
 		dgvoice.PlayAudioFile(currentVoiceSession, fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
@@ -3441,6 +3445,31 @@ func handleGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMemberRemov
 	}
 }
 
+func handleGuildMemberUpdate(s *discordgo.Session, m *discordgo.GuildMemberUpdate) {
+	if m.User.ID == ownUserID {
+		fmt.Println("fixing self")
+		if justNicknamed, found := wasNicknamed[m.GuildID]; found && justNicknamed {
+			wasNicknamed[m.GuildID] = false
+			return
+		}
+		var lastUsername string
+		if err := sqlClient.QueryRow(`SELECT username FROM own_username WHERE guild_id = $1 ORDER BY create_date DESC LIMIT 1`, m.GuildID).Scan(&lastUsername); err != nil {
+			if err == sql.ErrNoRows {
+				lastUsername = "disgo"
+			} else {
+				fmt.Println("ERROR reverting update: getting old name", err)
+				return
+			}
+		}
+		if lastUsername == m.Nick {
+			return
+		}
+		if err := s.GuildMemberNickname(m.GuildID, "@me/nick", lastUsername); err != nil {
+			fmt.Println("ERROR reverting update: changing nick", err)
+		}
+	}
+}
+
 func handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 	messageID, err := strconv.ParseUint(m.ID, 10, 64)
 	if err != nil {
@@ -3660,6 +3689,7 @@ func main() {
 	client.AddHandler(handleVoiceUpdate)
 	client.AddHandler(handleGuildMemberAdd)
 	client.AddHandler(handleGuildMemberRemove)
+	client.AddHandler(handleGuildMemberUpdate)
 	client.AddHandler(handleMessageDelete)
 	client.Open()
 	defer client.Close()
