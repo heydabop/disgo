@@ -3149,7 +3149,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
-	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) {
+	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) bool {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
 			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout":
@@ -3168,7 +3168,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				fmt.Println("ERROR in " + command[0])
 				fmt.Printf("ARGS: %v\n", command[1:])
 				fmt.Println("ERROR: " + err.Error())
-				return
+				return true
 			}
 			if len(reply) > 0 {
 				message, err := s.ChannelMessageSend(m.ChannelID, reply)
@@ -3187,8 +3187,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				lastCommandMessages[m.Author.ID] = *m.Message
 				lastMessages[m.Author.ID] = *message
 			}
-			return
+			return true
 		}
+		return false
 	}
 
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -3257,8 +3258,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 
 		for _, regex := range commandRegexes {
 			if match := regex.FindStringSubmatch(m.Content); match != nil {
-				executeCommand(s, m, strings.Fields(match[1]))
-				return
+				if executeCommand(s, m, strings.Fields(match[1])) {
+					return
+				}
 			}
 		}
 		if match := questionRegex.FindString(m.Content); match != "" {
