@@ -648,6 +648,7 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 
 func roll(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	var max int64
+	dice := int64(1)
 	if len(args) < 1 {
 		max = 6
 	} else {
@@ -660,7 +661,21 @@ func roll(session *discordgo.Session, chanID, authorID, messageID string, args [
 			return "", errors.New("Max roll must be more than 0")
 		}
 	}
-	return fmt.Sprintf("%d", Rand.Int63n(max)+1), nil
+	if len(args) > 1 {
+		var err error
+		dice, err = strconv.ParseInt(args[1], 10, 64)
+		if err != nil {
+			return "", err
+		}
+		if dice <= 0 {
+			return "", errors.New("Number of dice must be more than 0")
+		}
+	}
+	rolls := make([]string, dice)
+	for i := int64(0); i < dice; i++ {
+		rolls[i] = strconv.FormatInt(Rand.Int63n(max)+1, 10)
+	}
+	return fmt.Sprintf(strings.Join(rolls, " ")), nil
 }
 
 func uptime(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3009,7 +3024,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **reminders** - list this channels pending reminders
 **rename** [new username] - renames bot
-**roll** [sides (optional)] - "rolls" a die with <sides> sides`)
+**roll** [sides (optional)] [number (optional)] - "rolls" <number> dice with <sides> sides`)
 	if err != nil {
 		return "", err
 	}
