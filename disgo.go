@@ -3239,6 +3239,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		/*if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
+		if strings.Contains(strings.ToLower(m.Content), "texas") {
+			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
+		}
 		if m.ChannelID == minecraftChanID {
 			username, found := minecraftUsernameMap[m.Author.ID]
 			if !found {
