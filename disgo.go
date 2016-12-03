@@ -523,7 +523,7 @@ func vote(session *discordgo.Session, chanID, authorID, messageID string, args [
 	if err := sqlClient.QueryRow(`SELECT karma FROM user_karma WHERE guild_id = $1 AND user_id = $2`, channel.GuildID, userID).Scan(&karma); err != nil {
 		if err == sql.ErrNoRows {
 			karma = 0
-			if _, err := sqlClient.Exec(`INSERT INTERO user_karma(guild_id, user_id, karma) VALUES ($1, $2, $3)`, channel.GuildID, userID, karma); err != nil {
+			if _, err := sqlClient.Exec(`INSERT INTO user_karma(guild_id, user_id, karma) VALUES ($1, $2, $3)`, channel.GuildID, userID, karma); err != nil {
 				return "", err
 			}
 		} else {
@@ -1224,7 +1224,7 @@ func asuh(session *discordgo.Session, chanID, authorID, messageID string, args [
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(38)
+		suh := Rand.Intn(39)
 		dgvoice.PlayAudioFile(currentVoiceSession, fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
@@ -3228,6 +3228,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println(err.Error())
 		}
 
+		if strings.Contains(strings.ToLower(m.Content), "texas") {
+			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
+		}
+
 		if m.Author.ID == ownUserID {
 			return
 		}
@@ -3239,9 +3243,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		/*if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
-		if strings.Contains(strings.ToLower(m.Content), "texas") {
-			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
-		}
 		if m.ChannelID == minecraftChanID {
 			username, found := minecraftUsernameMap[m.Author.ID]
 			if !found {
