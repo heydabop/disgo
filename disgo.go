@@ -167,8 +167,14 @@ func timeSinceStr(timeSince time.Duration) string {
 	return str
 }
 
-func getUser(session *discordgo.Session, userID string) (user *discordgo.User, err error) {
-	user, err = session.User(userID)
+func getUsername(session *discordgo.Session, userID, guildID string) (string, error) {
+	member, err := session.State.Member(guildID, userID)
+	if err == nil {
+		if len(member.Nick) > 0 {
+			return member.Nick, nil
+		}
+	}
+	user, err := session.User(userID)
 	if err != nil {
 		errStr := err.Error()
 		commaIndex := strings.Index(errStr, ",")
@@ -178,15 +184,14 @@ func getUser(session *discordgo.Session, userID string) (user *discordgo.User, e
 			jErr := json.Unmarshal([]byte(jsonStr), &dErr)
 			if jErr != nil {
 				fmt.Println(jErr.Error())
-				return
+				return "", nil
 			}
 			if dErr.Code == 10013 {
-				user = &discordgo.User{ID: userID, Email: "", Username: "`<UNKNOWN>`", Avatar: "", Discriminator: "", Token: "", Verified: false, Bot: false}
-				err = nil
+				return "`<UNKNOWN>`", nil
 			}
 		}
 	}
-	return
+	return user.Username, nil
 }
 
 func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (string, error) {
@@ -594,11 +599,11 @@ func votes(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 	finalString := ""
 	for i, vote := range votes {
-		user, err := getUser(session, users[i])
+		username, err := getUsername(session, users[i], channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %d\n", user.Username, vote)
+		finalString += fmt.Sprintf("%s — %d\n", username, vote)
 	}
 	return finalString, nil
 }
@@ -637,11 +642,11 @@ func money(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 	finalString := "(Those not listed have 10)\n"
 	for i, money := range monies {
-		user, err := getUser(session, users[i])
+		username, err := getUsername(session, users[i], channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %.2f\n", user.Username, money)
+		finalString += fmt.Sprintf("%s — %.2f\n", username, money)
 	}
 	return finalString, nil
 }
@@ -733,6 +738,10 @@ func top(session *discordgo.Session, chanID, authorID, messageID string, args []
 			return "", err
 		}
 	}
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) AS num_messages FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' GROUP BY author_id ORDER BY count(author_id) DESC LIMIT $2`, chanID, limit)
 	if err != nil {
 		return "", err
@@ -752,11 +761,11 @@ func top(session *discordgo.Session, chanID, authorID, messageID string, args []
 	}
 	finalString := ""
 	for i, count := range counts {
-		user, err := getUser(session, users[i])
+		username, err := getUsername(session, users[i], channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %d\n", user.Username, count)
+		finalString += fmt.Sprintf("%s — %d\n", username, count)
 	}
 	return finalString, nil
 }
@@ -771,6 +780,10 @@ func topLength(session *discordgo.Session, chanID, authorID, messageID string, a
 		if err != nil || limit < 0 {
 			return "", err
 		}
+	}
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
 	}
 	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' AND trim(content) != ''`, chanID)
 	if err != nil {
@@ -803,11 +816,11 @@ func topLength(session *discordgo.Session, chanID, authorID, messageID string, a
 		if i >= limit {
 			break
 		}
-		user, err := getUser(session, length.AuthorID)
+		username, err := getUsername(session, length.AuthorID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		finalString += fmt.Sprintf("%s — %.2f\n", user.Username, length.AvgLength)
+		finalString += fmt.Sprintf("%s — %.2f\n", username, length.AvgLength)
 	}
 	return finalString, nil
 }
@@ -856,14 +869,14 @@ func rename(session *discordgo.Session, chanID, authorID, messageID string, args
 			authorID, newUsername, newLockedMinutes, channel.GuildID); err != nil {
 			return "", err
 		}
-		author, err := getUser(session, authorID)
+		username, err := getUsername(session, authorID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
 		if authorKarma > 0 {
-			return fmt.Sprintf("%s's name change will last for an extra %d minutes thanks to their karma!", author.Username, 10*authorKarma), nil
+			return fmt.Sprintf("%s's name change will last for an extra %d minutes thanks to their karma!", username, 10*authorKarma), nil
 		} else if authorKarma < 0 {
-			return fmt.Sprintf("%s's name change will last up to %d minutes less due to their karma...", author.Username, -10*authorKarma), nil
+			return fmt.Sprintf("%s's name change will last up to %d minutes less due to their karma...", username, -10*authorKarma), nil
 		}
 	} else {
 		return "I'm not ready to change who I am.", nil
@@ -885,11 +898,11 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 			return "", err
 		}
 	}
-	user, err := getUser(session, userID)
+	channel, err := session.State.Channel(chanID)
 	if err != nil {
 		return "", err
 	}
-	channel, err := session.State.Channel(chanID)
+	username, err := getUsername(session, userID, channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -899,30 +912,30 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 	online := false
 	for _, presence := range guild.Presences {
-		if presence.User != nil && presence.User.ID == user.ID {
+		if presence.User != nil && presence.User.ID == userID {
 			online = presence.Status == "online"
 			break
 		}
 	}
 	if online {
-		return fmt.Sprintf("%s is currently online", user.Username), nil
+		return fmt.Sprintf("%s is currently online", username), nil
 	}
 	var lastOnline time.Time
 	if err := sqlClient.QueryRow(`SELECT create_date FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND presence = 'online' ORDER BY create_date DESC LIMIT 1`, guild.ID, userID).Scan(&lastOnline); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Sprintf("%s was last seen at least %.f days ago", user.Username, time.Since(time.Date(2016, 4, 7, 1, 7, 0, 0, time.Local)).Hours()/24), nil
+			return fmt.Sprintf("%s was last seen at least %.f days ago", username, time.Since(time.Date(2016, 4, 7, 1, 7, 0, 0, time.Local)).Hours()/24), nil
 		}
 		return "", err
 	}
 	var offline time.Time
 	if err := sqlClient.QueryRow(`SELECT create_date FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND presence != 'online' AND create_date > $3 ORDER BY create_date ASC LIMIT 1`, guild.ID, userID, lastOnline).Scan(&offline); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Sprintf("%s is currently online", user.Username), nil
+			return fmt.Sprintf("%s is currently online", username), nil
 		}
 		return "", err
 	}
 	lastSeenStr := timeSinceStr(time.Since(offline))
-	return fmt.Sprintf("%s was last seen %s ago", user.Username, lastSeenStr), nil
+	return fmt.Sprintf("%s was last seen %s ago", username, lastSeenStr), nil
 }
 
 func deleteLastMessage(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -995,7 +1008,11 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 			return "", err
 		}
 	}
-	user, err := getUser(session, userID)
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	username, err := getUsername(session, userID, channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -1040,7 +1057,7 @@ func spamuser(session *discordgo.Session, chanID, authorID, messageID string, ar
 		lastQuoteIDs[chanID] = quoteID
 		userIDUpQuotes[chanID] = make([]string, 0)
 	}
-	return fmt.Sprintf("%s: %s\n%s", user.Username, freshStr, outStr), nil
+	return fmt.Sprintf("%s: %s\n%s", username, freshStr, outStr), nil
 }
 
 func spamdiscord(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1281,11 +1298,11 @@ func topquote(session *discordgo.Session, chanID, authorID, messageID string, ar
 		}
 		authorName := `#` + channel.Name
 		if authorID.Valid {
-			author, err := getUser(session, authorID.String)
+			username, err := getUsername(session, authorID.String, channel.GuildID)
 			if err != nil {
 				return "", err
 			}
-			authorName = author.Username
+			authorName = username
 		}
 		messages[i] = fmt.Sprintf("%s (%d): %s", authorName, score, content)
 	}
@@ -1307,6 +1324,10 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 		if err != nil || limit < 0 {
 			return "", err
 		}
+	}
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
 	}
 	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%'`, chanID)
 	if err != nil {
@@ -1371,11 +1392,11 @@ func wlist(session *discordgo.Session, chanID, authorID, messageID string, args 
 	}
 	output := make([]string, length)
 	for i := 0; i < length; i++ {
-		author, err := getUser(session, counts[i].AuthorID)
+		username, err := getUsername(session, counts[i].AuthorID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		output[i] = fmt.Sprintf("%s — %.4f", author.Username, counts[i].AvgLength)
+		output[i] = fmt.Sprintf("%s — %.4f", username, counts[i].AvgLength)
 	}
 	return strings.Join(output, "\n"), nil
 }
@@ -1501,6 +1522,10 @@ func remindme(session *discordgo.Session, chanID, authorID, messageID string, ar
 
 func meme(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	var opID, link string
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	for {
 		if err := sqlClient.QueryRow(`SELECT author_id, content FROM message WHERE chan_id = $1 AND (content LIKE 'http://%' OR content LIKE 'https://%') AND author_id != $2 ORDER BY random() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link); err != nil {
 			return "", err
@@ -1514,11 +1539,11 @@ func meme(session *discordgo.Session, chanID, authorID, messageID string, args [
 			res.Body.Close()
 			continue
 		}
-		op, err := getUser(session, opID)
+		username, err := getUsername(session, opID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%s: %s", op.Username, link), nil
+		return fmt.Sprintf("%s: %s", username, link), nil
 	}
 }
 
@@ -1619,6 +1644,10 @@ func lastUserMessage(session *discordgo.Session, chanID, authorID, messageID str
 }
 
 func reminders(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	rows, err := sqlClient.Query(`SELECT author_id, send_time, content FROM reminder WHERE chan_id = $1 AND send_time > now() ORDER BY send_time ASC`, chanID)
 	if err != nil {
 		return "", err
@@ -1632,11 +1661,11 @@ func reminders(session *discordgo.Session, chanID, authorID, messageID string, a
 		if err != nil {
 			return "", err
 		}
-		author, err := getUser(session, authorID)
+		username, err := getUsername(session, authorID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		message += fmt.Sprintf("%s - %s — %s\n", author.Username, remindTime.Format(time.RFC1123Z), content)
+		message += fmt.Sprintf("%s - %s — %s\n", username, remindTime.Format(time.RFC1123Z), content)
 	}
 	if len(message) < 1 {
 		return "The channel has no pending reminders.", nil
@@ -1712,9 +1741,8 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 
 	var limit int
-	var userID string
+	var userID, username string
 	var rows *sql.Rows
-	var user *discordgo.User
 	if len(args) < 1 {
 		limit = 10
 	} else {
@@ -1733,7 +1761,11 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 					return "", err
 				}
 			}
-			user, err = getUser(session, userID)
+			channel, err := session.State.Channel(chanID)
+			if err != nil {
+				return "", err
+			}
+			username, err = getUsername(session, userID, channel.GuildID)
 			if err != nil {
 				return "", err
 			}
@@ -1754,8 +1786,8 @@ func playtime(session *discordgo.Session, chanID, authorID, messageID string, ar
 	}
 
 	var message string
-	if user != nil {
-		message = fmt.Sprintf("%s since %s\n", user.Username, firstTime.Format(time.RFC1123Z))
+	if len(username) > 0 {
+		message = fmt.Sprintf("%s since %s\n", username, firstTime.Format(time.RFC1123Z))
 	} else {
 		message = fmt.Sprintf("Since %s\n", firstTime.Format(time.RFC1123Z))
 	}
@@ -1816,9 +1848,8 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 	fmt.Println(startTime.Format(time.RFC3339))
 
 	limit := 10
-	var userID string
+	var userID, username string
 	var rows *sql.Rows
-	var user *discordgo.User
 	if len(strings.Fields(selectionArg)) >= 1 {
 		var err error
 		limit, err = strconv.Atoi(selectionArg)
@@ -1836,7 +1867,7 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 					return "", err
 				}
 			}
-			user, err = getUser(session, userID)
+			username, err = getUsername(session, userID, channel.GuildID)
 			if err != nil {
 				return "", err
 			}
@@ -1857,8 +1888,8 @@ func recentPlaytime(session *discordgo.Session, chanID, authorID, messageID stri
 	}
 
 	var message string
-	if user != nil {
-		message = fmt.Sprintf("%s since %s\n", user.Username, startTime.Format(time.RFC1123Z))
+	if len(username) > 0 {
+		message = fmt.Sprintf("%s since %s\n", username, startTime.Format(time.RFC1123Z))
 	} else {
 		message = fmt.Sprintf("Since %s\n", startTime.Format(time.RFC1123Z))
 	}
@@ -1873,6 +1904,10 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 	var rows *sql.Rows
 	var err error
 	var username string
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	if len(args) > 0 {
 		var userID string
 		var err error
@@ -1884,11 +1919,10 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 				return "", err
 			}
 		}
-		user, err := getUser(session, userID)
+		username, err = getUsername(session, userID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		username = user.Username
 		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date ASC`, chanID, userID)
 	} else {
 		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id != $2 ORDER BY create_date ASC`, chanID, ownUserID)
@@ -1897,10 +1931,6 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 		return "", err
 	}
 	defer rows.Close()
-	channel, err := session.State.Channel(chanID)
-	if err != nil {
-		return "", err
-	}
 	hourCount := make([]uint64, 24)
 	var firstTime, msgTime time.Time
 	if rows.Next() {
@@ -2365,6 +2395,10 @@ func topcommand(session *discordgo.Session, chanID, authorID, messageID string, 
 	if len(args) < 1 {
 		return "", errors.New("No command provided")
 	}
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
 	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) FROM message WHERE content LIKE $1 AND chan_id = $2 GROUP BY author_id ORDER BY count(author_id) DESC`, fmt.Sprintf(`/%s%%`, args[0]), chanID)
 	if err != nil {
 		return "", err
@@ -2378,11 +2412,11 @@ func topcommand(session *discordgo.Session, chanID, authorID, messageID string, 
 		if err != nil {
 			return "", err
 		}
-		user, err := getUser(session, userID)
+		username, err := getUsername(session, userID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		message += fmt.Sprintf("%s — %d\n", user.Username, count)
+		message += fmt.Sprintf("%s — %d\n", username, count)
 	}
 	return message, nil
 }
@@ -2531,7 +2565,7 @@ func updateAvatar(session *discordgo.Session, chanID, authorID, messageID string
 	avatarBase64 := base64.StdEncoding.EncodeToString(buf)
 	avatarBase64 = fmt.Sprintf("data:image/png;base64,%s", avatarBase64)
 
-	self, err := getUser(session, "@me")
+	self, err := session.User("@me")
 	if err != nil {
 		return "", err
 	}
@@ -2558,11 +2592,11 @@ func lastPlayed(session *discordgo.Session, chanID, authorID, messageID string, 
 			return "", err
 		}
 	}
-	user, err := getUser(session, userID)
+	channel, err := session.State.Channel(chanID)
 	if err != nil {
 		return "", err
 	}
-	channel, err := session.State.Channel(chanID)
+	username, err := getUsername(session, userID, channel.GuildID)
 	if err != nil {
 		return "", err
 	}
@@ -2572,35 +2606,39 @@ func lastPlayed(session *discordgo.Session, chanID, authorID, messageID string, 
 	}
 	var game *discordgo.Game
 	for _, presence := range guild.Presences {
-		if presence.User != nil && presence.User.ID == user.ID {
+		if presence.User != nil && presence.User.ID == userID {
 			game = presence.Game
 			break
 		}
 	}
 	if game != nil {
-		return fmt.Sprintf("%s is currently playing %s", user.Username, game.Name), nil
+		return fmt.Sprintf("%s is currently playing %s", username, game.Name), nil
 	}
 	var lastPlayedGame string
 	var lastPlayed time.Time
 	if err := sqlClient.QueryRow(`SELECT create_date, game FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND game != '' ORDER BY create_date DESC LIMIT 1`, guild.ID, userID).Scan(&lastPlayed, &lastPlayedGame); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Sprintf("I've never seen %s play anything...", user.Username), nil
+			return fmt.Sprintf("I've never seen %s play anything...", username), nil
 		}
 		return "", err
 	}
 	lastSeenStr := timeSinceStr(time.Since(lastPlayed))
-	return fmt.Sprintf("%s last played %s %s ago", user.Username, lastPlayedGame, lastSeenStr), nil
+	return fmt.Sprintf("%s last played %s %s ago", username, lastPlayedGame, lastSeenStr), nil
 }
 
 func whois(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", nil
 	}
-	user, err := getUser(session, args[0])
+	channel, err := session.State.Channel(chanID)
 	if err != nil {
 		return "", err
 	}
-	return user.Username, nil
+	username, err := getUsername(session, args[0], channel.GuildID)
+	if err != nil {
+		return "", err
+	}
+	return username, nil
 }
 
 func starbound(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2789,11 +2827,11 @@ func topOnline(session *discordgo.Session, chanID, authorID, messageID string, a
 	}
 	onlineUsernames := make([]string, len(maxUserOnline))
 	for i, userID := range maxUserOnline {
-		user, err := getUser(session, userID)
+		username, err := getUsername(session, userID, channel.GuildID)
 		if err != nil {
 			return "", err
 		}
-		onlineUsernames[i] = user.Username
+		onlineUsernames[i] = username
 	}
 	return fmt.Sprintf("The following %d users were online on %s\n%s", maxOnline, maxTime.Format("Jan _2, 2006"), strings.Join(onlineUsernames, ", ")), nil
 }
