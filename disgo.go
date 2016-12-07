@@ -3035,39 +3035,50 @@ func jpg(session *discordgo.Session, chanID, authorID, messageID string, args []
 		return "", nil
 	}
 	for _, message := range messages {
+		var URL string
 		if message.Attachments != nil && len(message.Attachments) > 0 {
-			URL := message.Attachments[0].URL
-			lastIndex := strings.LastIndex(URL, ".")
-			if lastIndex == -1 || lastIndex == len(URL)-1 {
+			attachmentURL := message.Attachments[0].URL
+			lastIndex := strings.LastIndex(attachmentURL, ".")
+			if lastIndex == -1 || lastIndex == len(attachmentURL)-1 {
 				continue
 			}
-			ext := strings.ToLower(URL[lastIndex+1:])
+			ext := strings.ToLower(attachmentURL[lastIndex+1:])
 			if ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "gif" {
-				res, err := http.Get(URL)
-				if err != nil {
-					return "", err
-				}
-				defer res.Body.Close()
-				if res.StatusCode != 200 {
-					return "", errors.New(res.Status)
-				}
-
-				linkedImage, _, err := image.Decode(res.Body)
-				if err != nil {
-					return "", err
-				}
-				jpgImage := new(bytes.Buffer)
-				options := jpeg.Options{Quality: 0}
-				if err = jpeg.Encode(jpgImage, linkedImage, &options); err != nil {
-					return "", err
-				}
-
-				if _, err = session.ChannelFileSend(chanID, "jpeg.jpg", jpgImage); err != nil {
-					return "", err
-				}
-				return "", nil
+				URL = attachmentURL
 			}
 		}
+		if len(URL) < 1 {
+			urlRegex := regexp.MustCompile(`(?i)^https?:\/\/.+\.(?:jpg|png|jpeg|gif)$`)
+			if urlRegex.MatchString(message.Content) {
+				URL = message.Content
+			}
+		}
+		if len(URL) < 1 {
+			continue
+		}
+		res, err := http.Get(URL)
+		if err != nil {
+			return "", err
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			return "", errors.New(res.Status)
+		}
+
+		linkedImage, _, err := image.Decode(res.Body)
+		if err != nil {
+			return "", err
+		}
+		jpgImage := new(bytes.Buffer)
+		options := jpeg.Options{Quality: 0}
+		if err = jpeg.Encode(jpgImage, linkedImage, &options); err != nil {
+			return "", err
+		}
+
+		if _, err = session.ChannelFileSend(chanID, "jpeg.jpg", jpgImage); err != nil {
+			return "", err
+		}
+		return "", nil
 	}
 	return "I was unable to find a recently embedded image", nil
 }
