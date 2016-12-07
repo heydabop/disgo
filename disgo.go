@@ -20,6 +20,8 @@ import (
 	"golang.org/x/net/html/atom"
 	"image"
 	imageColor "image/color"
+	_ "image/gif"
+	"image/jpeg"
 	"image/png"
 	"io/ioutil"
 	"math"
@@ -1970,11 +1972,13 @@ func activity(session *discordgo.Session, chanID, authorID, messageID string, ar
 		return "", err
 	}
 	defer os.Remove(datapointsFile.Name())
+	defer datapointsFile.Close()
 	plotFile, err := ioutil.TempFile("", "disgo")
 	if err != nil {
 		return "", err
 	}
 	defer os.Remove(plotFile.Name())
+	defer plotFile.Close()
 	err = ioutil.WriteFile(datapointsFile.Name(), []byte(datapoints), os.ModeTemporary)
 	if err != nil {
 		return "", err
@@ -2508,11 +2512,13 @@ func gameactivity(session *discordgo.Session, chanID, authorID, messageID string
 		return "", err
 	}
 	defer os.Remove(datapointsFile.Name())
+	defer datapointsFile.Close()
 	plotFile, err := ioutil.TempFile("", "disgo")
 	if err != nil {
 		return "", err
 	}
 	defer os.Remove(plotFile.Name())
+	defer plotFile.Close()
 	err = ioutil.WriteFile(datapointsFile.Name(), []byte(datapoints), os.ModeTemporary)
 	if err != nil {
 		return "", err
@@ -2534,6 +2540,7 @@ func invite(session *discordgo.Session, chanID, authorID, messageID string, args
 	neededPermissions := discordgo.PermissionReadMessages |
 		discordgo.PermissionSendMessages |
 		discordgo.PermissionManageMessages |
+		discordgo.PermissionReadMessageHistory |
 		discordgo.PermissionEmbedLinks |
 		discordgo.PermissionAttachFiles |
 		discordgo.PermissionVoiceConnect |
@@ -2906,6 +2913,7 @@ func gtext(session *discordgo.Session, chanID, authorID, messageID string, args 
 		return "", nil
 	}
 	defer os.Remove(imageFile.Name())
+	defer imageFile.Close()
 
 	if err = exec.Command("convert", "-size", "400x12", "xc:transparent", "-font", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "-pointsize", "10", "-fill", "#789922", "-stroke", "#789922", "-draw", fmt.Sprintf("text 0,10 '%s'", fmt.Sprintf(">%s", args[0])), fmt.Sprintf("png:%s", imageFile.Name())).Run(); err != nil {
 		fmt.Println(err)
@@ -2969,6 +2977,7 @@ func greentext(session *discordgo.Session, chanID, authorID, messageID string, a
 		return "", err
 	}
 	defer os.Remove(imageFile.Name())
+	defer imageFile.Close()
 	if err = exec.Command(
 		"convert",
 		"-size",
@@ -3020,6 +3029,49 @@ func source(session *discordgo.Session, chanID, authorID, messageID string, args
 	return "https://github.com/heydabop/disgo", nil
 }
 
+func jpg(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	messages, err := session.ChannelMessages(chanID, 10, messageID, "")
+	if err != nil {
+		return "", nil
+	}
+	for _, message := range messages {
+		if message.Attachments != nil && len(message.Attachments) > 0 {
+			URL := message.Attachments[0].URL
+			lastIndex := strings.LastIndex(URL, ".")
+			if lastIndex == -1 || lastIndex == len(URL)-1 {
+				continue
+			}
+			ext := strings.ToLower(URL[lastIndex+1:])
+			if ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "gif" {
+				res, err := http.Get(URL)
+				if err != nil {
+					return "", err
+				}
+				defer res.Body.Close()
+				if res.StatusCode != 200 {
+					return "", errors.New(res.Status)
+				}
+
+				linkedImage, _, err := image.Decode(res.Body)
+				if err != nil {
+					return "", err
+				}
+				jpgImage := new(bytes.Buffer)
+				options := jpeg.Options{Quality: 0}
+				if err = jpeg.Encode(jpgImage, linkedImage, &options); err != nil {
+					return "", err
+				}
+
+				if _, err = session.ChannelFileSend(chanID, "jpeg.jpg", jpgImage); err != nil {
+					return "", err
+				}
+				return "", nil
+			}
+		}
+	}
+	return "I was unable to find a recently embedded image", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3044,6 +3096,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "", err
 	}
 	_, err = session.ChannelMessageSend(privateChannel.ID, `**greentext** - makes greentext with a couple messages from the channel's history
+**jpg** - looks for an embedded image in the last 10 messages and reuploads it with modern JPEG™ compression
 **karma** [number (optional)] - displays top <number> users and their karma
 **lastplayed** [username] - displays game last played by <username>
 **lastseen** [username] - displays when <username> was last seen
@@ -3199,6 +3252,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"messages":       Command(totalMessages),
 		"servers":        Command(totalServers),
 		"source":         Command(source),
+		"jpg":            Command(jpg),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
