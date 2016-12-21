@@ -3022,7 +3022,7 @@ func totalServers(session *discordgo.Session, chanID, authorID, messageID string
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("I am currently a memebr of %d servers", len(userGuilds)), nil
+	return fmt.Sprintf("I am currently a member of %d servers", len(userGuilds)), nil
 }
 
 func source(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3107,7 +3107,7 @@ func help(session *discordgo.Session, chanID, authorID, messageID string, args [
 		return "", err
 	}
 	_, err = session.ChannelMessageSend(privateChannel.ID, `**greentext** - makes greentext with a couple messages from the channel's history
-**jpg** - looks for an embedded image in the last 10 messages and reuploads it with modern JPEG™ compression
+**jpg** - looks for an embedded or linked image in the last 10 messages and reuploads it with modern JPEG™ compression
 **karma** [number (optional)] - displays top <number> users and their karma
 **lastplayed** [username] - displays game last played by <username>
 **lastseen** [username] - displays when <username> was last seen
@@ -3880,11 +3880,11 @@ func main() {
 					fmt.Println("ERROR leaving voice channel " + err.Error())
 				}
 			}
-			client.Logout()
-			client.Close()
 			for _, guild := range userGuilds {
 				sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guild.ID, ownUserID)
 			}
+			client.Logout()
+			client.Close()
 			os.Exit(0)
 		}
 	}()
