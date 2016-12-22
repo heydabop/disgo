@@ -175,6 +175,9 @@ func getUsername(session *discordgo.Session, userID, guildID string) (string, er
 		if len(member.Nick) > 0 {
 			return member.Nick, nil
 		}
+		if member.User != nil && len(member.User.Username) > 0 {
+			return member.User.Username, nil
+		}
 	}
 	user, err := session.User(userID)
 	if err != nil {
