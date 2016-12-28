@@ -918,7 +918,7 @@ func lastseen(session *discordgo.Session, chanID, authorID, messageID string, ar
 	online := false
 	for _, presence := range guild.Presences {
 		if presence.User != nil && presence.User.ID == userID {
-			online = presence.Status == "online"
+			online = presence.Status == discordgo.StatusOnline
 			break
 		}
 	}
@@ -3513,7 +3513,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	} else {
 		fmt.Printf("%20s %20s %20s : %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
 	}*/
-	if _, err := sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, p.GuildID, p.User.ID, p.Status, gameName); err != nil {
+	if _, err := sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, p.GuildID, p.User.ID, string(p.Status), gameName); err != nil {
 		fmt.Println("ERROR insert into UserPresence DB")
 		fmt.Println(err.Error())
 	}
@@ -3841,8 +3841,8 @@ func main() {
 	if err != nil {
 		fmt.Println("Error starting transaction", err.Error())
 	} else {
-		for _, guild := range userGuilds {
-			guild, err = client.Guild(guild.ID)
+		for _, userGuild := range userGuilds {
+			guild, err := client.Guild(userGuild.ID)
 			if err != nil {
 				fmt.Println("Error getting guild", err.Error())
 				continue
@@ -3853,7 +3853,7 @@ func main() {
 				if presence.Game != nil {
 					gameName = presence.Game.Name
 				}
-				if _, err := tran.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, guild.ID, presence.User.ID, presence.Status, gameName); err != nil {
+				if _, err := tran.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, guild.ID, presence.User.ID, string(presence.Status), gameName); err != nil {
 					fmt.Println("ERROR inserting into user_presence", err.Error())
 				}
 				userMap[presence.User.ID] = true
