@@ -3366,7 +3366,12 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
 		}
 
-		if ignoredUntil, found := ignoredUserIDs[m.Author.ID]; m.Author.ID == ownUserID || found && ignoredUntil.After(time.Now()) {
+		if m.Author.ID == ownUserID {
+			return
+		}
+
+		if ignoredUntil, found := ignoredUserIDs[m.Author.ID]; found && ignoredUntil.After(time.Now()) {
+			s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return
 		}
 
