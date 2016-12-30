@@ -3909,7 +3909,7 @@ func main() {
 			continue
 		}
 		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
-	}
+	} 
 	rows.Close()
 
 	if len(minecraftChanID) > 0 {
