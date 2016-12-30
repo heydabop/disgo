@@ -134,6 +134,7 @@ var (
 	lastKappa                         = make(map[string]time.Time)
 	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
 	lastQuoteIDs                      = make(map[string]int64)
+	ignoredUserIDs                    = make(map[string]time.Time)
 	ownUserID                         string
 	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
 	rouletteGuildID                   = ""
@@ -3086,6 +3087,32 @@ func jpg(session *discordgo.Session, chanID, authorID, messageID string, args []
 	return "I was unable to find a recently embedded image", nil
 }
 
+func ignore(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
+	if authorID != "98482369446543360" {
+		return "", nil
+	}
+	if len(args) < 1 {
+		return "", errors.New("No user provided")
+	}
+	var userID string
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+	minutes := 5
+	if len(args) > 1 {
+		argMinutes, err := strconv.Atoi(args[1])
+		if err != nil {
+			return "", err
+		}
+		minutes = argMinutes
+	}
+	ignoredUserIDs[userID] = time.Now().Add(time.Duration(minutes) * time.Minute)
+
+	return "", nil
+}
+
 func help(session *discordgo.Session, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3267,13 +3294,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"servers":        Command(totalServers),
 		"source":         Command(source),
 		"jpg":            Command(jpg),
+		"ignore":         Command(ignore),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
 	executeCommand := func(s *discordgo.Session, m *discordgo.MessageCreate, command []string) bool {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout", "ignore":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
@@ -3338,7 +3366,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
 		}
 
-		if m.Author.ID == ownUserID {
+		if ignoredUntil, found := ignoredUserIDs[m.Author.ID]; m.Author.ID == ownUserID || found && ignoredUntil.After(time.Now()) {
 			return
 		}
 
