@@ -135,6 +135,7 @@ var (
 	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
 	lastQuoteIDs                      = make(map[string]int64)
 	ignoredUserIDs                    = make(map[[2]string]time.Time)
+	mutedUserIDs                      = make(map[[2]string]time.Time)
 	ownUserID                         string
 	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
 	rouletteGuildID                   = ""
@@ -3033,6 +3034,48 @@ func ignore(session *discordgo.Session, guildID, chanID, authorID, messageID str
 	return "", nil
 }
 
+func mute(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	member, err := session.State.Member(guildID, authorID)
+	if err != nil {
+		return "", err
+	}
+	admin := false
+	for _, roleID := range member.Roles {
+		role, err := session.State.Role(guildID, roleID)
+		if err != nil {
+			return "", err
+		}
+		if role.Permissions&discordgo.PermissionAdministrator == discordgo.PermissionAdministrator {
+			admin = true
+			break
+		}
+	}
+	if !admin {
+		return "I don't have to listen to you.", nil
+	}
+
+	if len(args) < 1 {
+		return "", errors.New("No user provided")
+	}
+	var userID string
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+	minutes := 5
+	if len(args) > 1 {
+		argMinutes, err := strconv.Atoi(args[1])
+		if err != nil {
+			return "", err
+		}
+		minutes = argMinutes
+	}
+	mutedUserIDs[[2]string{guildID, userID}] = time.Now().Add(time.Duration(minutes) * time.Minute)
+
+	return "", nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3216,13 +3259,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"jpg":            Command(jpg),
 		"ascii":          Command(ascii),
 		"ignore":         Command(ignore),
+		"mute":           Command(mute),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
 	executeCommand := func(s *discordgo.Session, guildID string, m *discordgo.MessageCreate, command []string) bool {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout", "ignore":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout", "ignore", "mute":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
@@ -3297,8 +3341,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println("ERROR: " + err.Error())
 			return
 		}
+		if mutedUntil, found := mutedUserIDs[[2]string{channel.GuildID, m.Author.ID}]; found && mutedUntil.After(time.Now()) {
+			s.ChannelMessageDelete(m.ChannelID, m.ID)
+			return
+		}
 		if ignoredUntil, found := ignoredUserIDs[[2]string{channel.GuildID, m.Author.ID}]; found && ignoredUntil.After(time.Now()) {
-			//s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return
 		}
 
