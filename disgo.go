@@ -3327,10 +3327,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println(err.Error())
 		}
 
-		if strings.Contains(strings.ToLower(m.Content), "texas") {
-			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
-		}
-
 		if m.Author.ID == ownUserID {
 			return
 		}
@@ -3347,6 +3343,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		}
 		if ignoredUntil, found := ignoredUserIDs[[2]string{channel.GuildID, m.Author.ID}]; found && ignoredUntil.After(time.Now()) {
 			return
+		}
+
+		if strings.Contains(strings.ToLower(m.Content), "texas") {
+			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
 		}
 
 		/*if typingTimer, valid := typingTimer[m.Author.ID]; valid {
