@@ -3076,6 +3076,34 @@ func mute(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return "", nil
 }
 
+func dolphin(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	dolphinField := discordgo.MessageEmbedField{
+		Name:  "Dolphin 5.0 Download",
+		Value: "http://dl-mirror.dolphin-emu.org/5.0/dolphin-x64-5.0.exe",
+	}
+	configField := discordgo.MessageEmbedField{
+		Name:  "Shared Config for Netplay",
+		Value: "Coming Soon",
+	}
+	fields := []*discordgo.MessageEmbedField{&dolphinField, &configField}
+	thumbnail := discordgo.MessageEmbedThumbnail{
+		URL:    "https://silverfish.anex.us/dolphin.png",
+		Width:  128,
+		Height: 71,
+	}
+	embed := discordgo.MessageEmbed{
+		Type:      "rich",
+		Title:     "Dolphin Emulator Files",
+		Thumbnail: &thumbnail,
+		Color:     4641535,
+		Fields:    fields,
+	}
+	if _, err := session.ChannelMessageSendEmbed(chanID, &embed); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3260,6 +3288,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"ascii":          Command(ascii),
 		"ignore":         Command(ignore),
 		"mute":           Command(mute),
+		"dolphin":        Command(dolphin),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
