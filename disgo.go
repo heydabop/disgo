@@ -128,8 +128,8 @@ type ShippoTrack struct {
 
 var (
 	currentGame                       string
-	currentVoiceSession               *discordgo.VoiceConnection
-	currentVoiceTimer                 *time.Timer
+	currentVoiceSessions              = make(map[string]*discordgo.VoiceConnection)
+	currentVoiceTimers                = make(map[string]*time.Timer)
 	gamelist                          []string
 	lastKappa                         = make(map[string]time.Time)
 	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
@@ -1162,36 +1162,36 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		return "I can't find which voice channel you're in.", nil
 	}
 
-	if currentVoiceSession != nil {
-		if currentVoiceSession.ChannelID == voiceChanID && currentVoiceSession.GuildID == guild.ID {
+	if currentVoiceSessions[guildID] != nil {
+		if currentVoiceSessions[guildID].ChannelID == voiceChanID && currentVoiceSessions[guildID].GuildID == guild.ID {
 			return "", nil
 		}
 		dgvoice.KillPlayer()
-		err = currentVoiceSession.Disconnect()
-		currentVoiceSession = nil
+		err = currentVoiceSessions[guildID].Disconnect()
+		currentVoiceSessions[guildID] = nil
 		if err != nil {
 			return "", err
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
 
-	currentVoiceSession, err = session.ChannelVoiceJoin(guild.ID, voiceChanID, false, false)
+	currentVoiceSessions[guildID], err = session.ChannelVoiceJoin(guild.ID, voiceChanID, false, false)
 	if err != nil {
-		currentVoiceSession = nil
+		currentVoiceSessions[guildID] = nil
 		return "", err
 	}
-	if currentVoiceTimer != nil {
-		currentVoiceTimer.Stop()
+	if currentVoiceTimers[guildID] != nil {
+		currentVoiceTimers[guildID].Stop()
 	}
-	currentVoiceTimer = time.AfterFunc(30*time.Second, func() {
-		if currentVoiceSession != nil {
+	currentVoiceTimers[guildID] = time.AfterFunc(30*time.Second, func() {
+		if currentVoiceSessions[guildID] != nil {
 			if Rand.Intn(3) == 0 {
-				dgvoice.PlayAudioFile(currentVoiceSession, "goodbye.mp3")
+				dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3")
 				time.Sleep(1 * time.Second)
 			}
 			dgvoice.KillPlayer()
-			err := currentVoiceSession.Disconnect()
-			currentVoiceSession = nil
+			err := currentVoiceSessions[guildID].Disconnect()
+			currentVoiceSessions[guildID] = nil
 			if err != nil {
 				fmt.Println("ERROR disconnecting from voice channel " + err.Error())
 			}
@@ -1200,12 +1200,17 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 
 	time.Sleep(1 * time.Second)
 	for i := 0; i < 10; i++ {
-		if currentVoiceSession.Ready == false || currentVoiceSession.OpusSend == nil {
+		if currentVoiceSessions[guildID].Ready == false || currentVoiceSessions[guildID].OpusSend == nil {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(41)
-		dgvoice.PlayAudioFile(currentVoiceSession, fmt.Sprintf("suh%d.mp3", suh))
+		var suh int
+		if chanID == "102550785425969152" {
+			suh = 42
+		} else {
+			suh = Rand.Intn(43)
+		}
+		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
 	session.ChannelMessageDelete(chanID, messageID)
@@ -3881,11 +3886,13 @@ func main() {
 	defer func() {
 		voiceMutex.Lock()
 		defer voiceMutex.Unlock()
-		if currentVoiceSession != nil {
-			dgvoice.KillPlayer()
-			err := currentVoiceSession.Disconnect()
-			if err != nil {
-				fmt.Println("ERROR leaving voice channel " + err.Error())
+		for _, voiceSession := range currentVoiceSessions {
+			if voiceSession != nil {
+				dgvoice.KillPlayer()
+				err := voiceSession.Disconnect()
+				if err != nil {
+					fmt.Println("ERROR leaving voice channel " + err.Error())
+				}
 			}
 		}
 	}()
@@ -3933,11 +3940,13 @@ func main() {
 		case <-signals:
 			voiceMutex.Lock()
 			defer voiceMutex.Unlock()
-			if currentVoiceSession != nil {
-				dgvoice.KillPlayer()
-				err := currentVoiceSession.Disconnect()
-				if err != nil {
-					fmt.Println("ERROR leaving voice channel " + err.Error())
+			for _, voiceSession := range currentVoiceSessions {
+				if voiceSession != nil {
+					dgvoice.KillPlayer()
+					err := voiceSession.Disconnect()
+					if err != nil {
+						fmt.Println("ERROR leaving voice channel " + err.Error())
+					}
 				}
 			}
 			for _, guild := range userGuilds {
