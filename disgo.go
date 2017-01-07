@@ -2585,9 +2585,22 @@ func permission(session *discordgo.Session, guildID, chanID, authorID, messageID
 }
 
 func voicekick(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	_, inGuild := voicekickGuildIDs[guildID]
-	_, authorized := voicekickAuthorIDs[authorID]
-	if !(inGuild && authorized) {
+	member, err := session.State.Member(guildID, authorID)
+	if err != nil {
+		return "", err
+	}
+	authorized := false
+	for _, roleID := range member.Roles {
+		role, err := session.State.Role(guildID, roleID)
+		if err != nil {
+			return "", err
+		}
+		if role.Permissions&discordgo.PermissionAdministrator == discordgo.PermissionAdministrator || role.Permissions&discordgo.PermissionVoiceMoveMembers == discordgo.PermissionVoiceMoveMembers {
+			authorized = true
+			break
+		}
+	}
+	if !authorized {
 		return "", nil
 	}
 	if len(args) < 1 {
@@ -2630,9 +2643,22 @@ func voicekick(session *discordgo.Session, guildID, chanID, authorID, messageID 
 }
 
 func timeout(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	_, inGuild := voicekickGuildIDs[guildID]
-	_, authorized := voicekickAuthorIDs[authorID]
-	if !(inGuild && authorized) {
+	member, err := session.State.Member(guildID, authorID)
+	if err != nil {
+		return "", err
+	}
+	authorized := false
+	for _, roleID := range member.Roles {
+		role, err := session.State.Role(guildID, roleID)
+		if err != nil {
+			return "", err
+		}
+		if role.Permissions&discordgo.PermissionAdministrator == discordgo.PermissionAdministrator || role.Permissions&discordgo.PermissionVoiceMoveMembers == discordgo.PermissionVoiceMoveMembers {
+			authorized = true
+			break
+		}
+	}
+	if !authorized {
 		return "", nil
 	}
 	if len(args) < 1 {
