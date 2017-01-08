@@ -1204,12 +1204,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		var suh int
-		if chanID == "102550785425969152" {
-			suh = 42
-		} else {
-			suh = Rand.Intn(43)
-		}
+		suh := Rand.Intn(43)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
