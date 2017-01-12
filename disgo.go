@@ -3382,10 +3382,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println(err.Error())
 		}
 
-		if m.Author.ID == ownUserID {
-			return
-		}
-
 		channel, err := s.State.Channel(m.ChannelID)
 		if err != nil {
 			s.ChannelMessageSend(m.ChannelID, "⚠ `"+err.Error()+"`")
@@ -3396,6 +3392,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return
 		}
+
+		if m.Author.ID == ownUserID {
+			return
+		}
+
 		if ignoredUntil, found := ignoredUserIDs[[2]string{channel.GuildID, m.Author.ID}]; found && ignoredUntil.After(time.Now()) {
 			return
 		}
