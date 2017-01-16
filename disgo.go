@@ -1204,7 +1204,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(45)
+		suh := Rand.Intn(46)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
@@ -1994,7 +1994,9 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if value != 0 && rouletteIsRed[value-1] {
 		colorStr = "Red"
 	}
-	time.AfterFunc(45*time.Second, func() {
+	time.AfterFunc(40*time.Second, func() {
+		session.ChannelTyping(chanID)
+		time.Sleep(5 * time.Second)
 		if value == 0 {
 			session.ChannelMessageSend(chanID, "Landed on 0")
 		} else {
@@ -3130,6 +3132,14 @@ func dolphin(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	return "", nil
 }
 
+func fortune(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	out, err := exec.Command("fortune", "-as").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3149,6 +3159,7 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 **downvote** [@user] - downvotes user
 **@[user]--** - downvotes user
 **forsen** - alias for /spam forsenlol
+**fortune** - get a "fortune"
 **gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel`)
 	if err != nil {
 		return "", err
@@ -3315,6 +3326,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"ignore":         Command(ignore),
 		"mute":           Command(mute),
 		"dolphin":        Command(dolphin),
+		"fortune":        Command(fortune),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
 	}
 
