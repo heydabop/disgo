@@ -138,11 +138,10 @@ var (
 	mutedUserIDs                      = make(map[[2]string]time.Time)
 	ownUserID                         string
 	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
-	rouletteGuildID                   = ""
 	rouletteIsRed                     = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
-	rouletteBets                      []UserBet
+	rouletteBets                      = make(map[string][]UserBet)
 	rouletteTableValues               = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
-	rouletteWheelSpinning             = false
+	rouletteWheelSpinning             = make(map[string]bool)
 	rouletteWheelValues               = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
 	startTime                         = time.Now()
 	sqlClient                         *sql.DB
@@ -1967,7 +1966,7 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return fmt.Sprintf("Please don't do that in here. Try <#190518994875318272>"), nil
 	}
-	if rouletteWheelSpinning {
+	if rouletteWheelSpinning[guildID] {
 		return "Wheel is already spinning, place a bet", nil
 	}
 	res, err := http.Post("https://api.random.org/json-rpc/1/invoke", "application/json", strings.NewReader(`{"jsonrpc": "2.0","method": "generateIntegers","params": {"apiKey": "9f397d6a-c4bd-49b6-9f9c-621183b2d2e1","n": 1,"min": 0,"max": 36},"id": `+messageID+`}`))
@@ -2001,7 +2000,7 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 			session.ChannelMessageSend(chanID, fmt.Sprintf("%s %d", colorStr, value))
 		}
 		winner := false
-		for _, bet := range rouletteBets {
+		for _, bet := range rouletteBets[guildID] {
 			betWin := false
 			for _, betSpace := range bet.WinningNumbers {
 				if betSpace == value {
@@ -2021,14 +2020,13 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 				}
 			}
 		}
-		if len(rouletteBets) > 0 && winner == false {
+		if len(rouletteBets[guildID]) > 0 && winner == false {
 			session.ChannelMessageSend(chanID, "Everyone loses!")
 		}
-		rouletteBets = make([]UserBet, 0)
-		rouletteWheelSpinning = false
+		rouletteBets[guildID] = make([]UserBet, 0)
+		rouletteWheelSpinning[guildID] = false
 	})
-	rouletteGuildID = guildID
-	rouletteWheelSpinning = true
+	rouletteWheelSpinning[guildID] = true
 	return "Spinning...", nil
 }
 
@@ -2096,11 +2094,8 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		}
 		return "", nil
 	}
-	if !rouletteWheelSpinning {
+	if !rouletteWheelSpinning[guildID] {
 		return "The wheel must be spinning to place a bet. Try /spin", nil
-	}
-	if guildID != rouletteGuildID { //TODO: dont be lazy and allow multiple wheels
-		return "", errors.New("Sorry, the wheel is spinning in another server...")
 	}
 	var bet float64
 	var spaces []int
@@ -2115,7 +2110,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if err != nil {
 			return "", err
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 35, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 35, bet})
 	case "split":
 		if len(args) < 3 {
 			return "", errors.New("Missing number(s) in split bet")
@@ -2125,7 +2120,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 			return "", err
 		}
 		if (spaces[0] != spaces[1]) && (((spaces[0]-1)/3 == (spaces[1]-1)/3 && int(math.Abs(float64(spaces[1]-spaces[0]))) == 1) || int(math.Abs(float64(spaces[1]-spaces[0]))) == 3 || ((spaces[0] == 0 || spaces[1] == 0) && int(math.Abs(float64(spaces[1]-spaces[0]))) <= 3)) {
-			rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 17, bet})
+			rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 17, bet})
 		} else {
 			return "", fmt.Errorf("Spaces %v aren't adjacent", spaces)
 		}
@@ -2148,7 +2143,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				}
 			}
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 11, bet})
 	case "corner":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 4)
 		if err != nil {
@@ -2162,7 +2157,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if spaces[1]-spaces[0] != 1 || spaces[3]-spaces[2] != 1 || (spaces[0]-1)/3 != (spaces[1]-1)/3 || (spaces[2]-1)/3 != (spaces[3]-1)/3 || ((spaces[2]-1)/3)-((spaces[0]-1)/3) != 1 || ((spaces[3]-1)/3)-((spaces[1]-1)/3) != 1 {
 			return "", fmt.Errorf("Spaces %v aren't all adjacent. Note that spaces should be entered in ascending order. 16 17 19 20 isn't treated the same as 19 20 16 17", spaces)
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 8, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 8, bet})
 	case "six":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 2)
 		if err != nil {
@@ -2184,7 +2179,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				}
 			}
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 5, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 5, bet})
 	case "trio":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 2)
 		if err != nil {
@@ -2194,7 +2189,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 			return "", errors.New("Trio bet is only valid with 1 and 2 or 2 and 3")
 		}
 		spaces = append(spaces, 0)
-		rouletteBets = append(rouletteBets, UserBet{authorID, spaces, 11, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 11, bet})
 	case "low":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2204,7 +2199,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i := 0; i < 18; i++ {
 			betSpaces[i] = i + 1
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
 	case "high":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2214,7 +2209,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i := 0; i < 18; i++ {
 			betSpaces[i] = i + 19
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
 	case "red":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2226,7 +2221,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i+1)
 			}
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
 	case "black":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2238,7 +2233,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i+1)
 			}
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
 	case "even":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2250,7 +2245,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i)
 			}
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
 	case "odd":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2262,7 +2257,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i)
 			}
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
 	case "dozen":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 1)
 		if err != nil {
@@ -2275,7 +2270,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i := 12 * (spaces[0] - 1); i < 12*spaces[0]; i++ {
 			betSpaces = append(betSpaces, i+1)
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 2, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 2, bet})
 	case "column":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 1)
 		if err != nil {
@@ -2288,13 +2283,13 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i, row := range rouletteTableValues {
 			betSpaces[i] = row[spaces[0]-1]
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, betSpaces, 2, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 2, bet})
 	case "snake":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
 			return "", err
 		}
-		rouletteBets = append(rouletteBets, UserBet{authorID, []int{1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, 34}, 2, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, []int{1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, 34}, 2, bet})
 	default:
 		return "", errors.New("Unrecognized bet type")
 	}
