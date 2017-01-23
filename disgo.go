@@ -25,6 +25,7 @@ import (
 	"image/png"
 	"io/ioutil"
 	"math"
+	"math/big"
 	"math/rand"
 	"net"
 	"net/http"
@@ -648,23 +649,24 @@ func money(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 }
 
 func roll(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	var max int64
-	dice := int64(1)
+	var max big.Int
+	one := big.NewInt(1)
+	dice := uint64(1)
 	if len(args) < 1 {
-		max = 6
+		max.SetInt64(6)
 	} else {
-		var err error
-		max, err = strconv.ParseInt(args[0], 10, 64)
-		if err != nil {
-			return "", err
+		var success bool
+		_, success = max.SetString(args[0], 10)
+		if !success {
+			return "", fmt.Errorf(`Unable to parse "%s"`, args[0])
 		}
-		if max <= 0 {
+		if max.Cmp(one) < 0 {
 			return "", errors.New("Max roll must be more than 0")
 		}
 	}
 	if len(args) > 1 {
 		var err error
-		dice, err = strconv.ParseInt(args[1], 10, 64)
+		dice, err = strconv.ParseUint(args[1], 10, 64)
 		if err != nil {
 			return "", err
 		}
@@ -673,8 +675,11 @@ func roll(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		}
 	}
 	rolls := make([]string, dice)
-	for i := int64(0); i < dice; i++ {
-		rolls[i] = strconv.FormatInt(Rand.Int63n(max)+1, 10)
+	var result big.Int
+	for i := uint64(0); i < dice; i++ {
+		result.Rand(Rand, &max)
+		result.Add(&result, one)
+		rolls[i] = result.Text(10)
 	}
 	return fmt.Sprintf(strings.Join(rolls, " ")), nil
 }
