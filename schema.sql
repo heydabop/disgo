@@ -17,7 +17,7 @@ SET row_security = off;
 SET search_path = public, pg_catalog;
 
 ALTER TABLE IF EXISTS ONLY public.vote DROP CONSTRAINT IF EXISTS vote_message_id_fkey;
-ALTER TABLE IF EXISTS ONLY public.message_delete DROP CONSTRAINT IF EXISTS message_delete_message_id_fkey;
+DROP TRIGGER IF EXISTS message_update ON public.message;
 ALTER TABLE IF EXISTS ONLY public.vote DROP CONSTRAINT IF EXISTS vote_pkey;
 ALTER TABLE IF EXISTS ONLY public.voice_state DROP CONSTRAINT IF EXISTS voice_state_pkey;
 ALTER TABLE IF EXISTS ONLY public.user_presence DROP CONSTRAINT IF EXISTS user_presence_pkey;
@@ -50,10 +50,10 @@ DROP SEQUENCE IF EXISTS public.reminder_id_seq;
 DROP TABLE IF EXISTS public.reminder;
 DROP SEQUENCE IF EXISTS public.own_username_id_seq;
 DROP TABLE IF EXISTS public.own_username;
-DROP TABLE IF EXISTS public.message_delete;
 DROP TABLE IF EXISTS public.message;
 DROP SEQUENCE IF EXISTS public.discord_quote_id_seq;
 DROP TABLE IF EXISTS public.discord_quote;
+DROP FUNCTION IF EXISTS public.on_record_update();
 DROP EXTENSION IF EXISTS plpgsql;
 DROP SCHEMA IF EXISTS public;
 --
@@ -85,6 +85,15 @@ COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
 
 
 SET search_path = public, pg_catalog;
+
+--
+-- Name: on_record_update(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION on_record_update() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$ begin new.update_date := now(); return new; end; $$;
+
 
 SET default_tablespace = '';
 
@@ -132,16 +141,8 @@ CREATE TABLE message (
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     chan_id character varying(30) NOT NULL,
     author_id character varying(30) NOT NULL,
-    content text
-);
-
-
---
--- Name: message_delete; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE message_delete (
-    message_id bigint NOT NULL
+    content text,
+    update_date timestamp with time zone DEFAULT now() NOT NULL
 );
 
 
@@ -507,11 +508,10 @@ ALTER TABLE ONLY vote
 
 
 --
--- Name: message_delete message_delete_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: message message_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY message_delete
-    ADD CONSTRAINT message_delete_message_id_fkey FOREIGN KEY (message_id) REFERENCES message(id);
+CREATE TRIGGER message_update BEFORE UPDATE ON message FOR EACH ROW EXECUTE PROCEDURE on_record_update();
 
 
 --
