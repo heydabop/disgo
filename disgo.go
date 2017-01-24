@@ -3667,8 +3667,20 @@ func handleMessageDelete(s *discordgo.Session, m *discordgo.MessageDelete) {
 		fmt.Println("ERROR parsing message ID " + err.Error())
 		return
 	}
-	if _, err = sqlClient.Exec(`INSERT INTO message_delete (message_id) VALUES ($1)`, messageID); err != nil {
-		fmt.Println("ERROR recording MessageDelete", err.Error())
+	if _, err = sqlClient.Exec(`DELETE FROM message WHERE id = $1`, messageID); err != nil {
+		fmt.Println("ERROR handling MessageDelete", err.Error())
+		return
+	}
+}
+
+func handleMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
+	messageID, err := strconv.ParseUint(m.ID, 10, 64)
+	if err != nil {
+		fmt.Println("ERROR parsing message ID " + err.Error())
+		return
+	}
+	if _, err = sqlClient.Exec(`UPDATE message SET content = $1 WHERE id = $2`, m.Content, messageID); err != nil {
+		fmt.Println("ERROR handling MessageUpdate", err.Error())
 		return
 	}
 }
@@ -3882,6 +3894,7 @@ func main() {
 	client.AddHandler(handleGuildMemberRemove)
 	client.AddHandler(handleGuildMemberUpdate)
 	client.AddHandler(handleMessageDelete)
+	client.AddHandler(handleMessageUpdate)
 	client.Open()
 	defer client.Close()
 	defer client.Logout()
