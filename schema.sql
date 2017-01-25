@@ -139,8 +139,8 @@ ALTER SEQUENCE discord_quote_id_seq OWNED BY discord_quote.id;
 CREATE TABLE message (
     id numeric NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
-    chan_id character varying(30) NOT NULL,
-    author_id character varying(30) NOT NULL,
+    chan_id numeric NOT NULL,
+    author_id numeric NOT NULL,
     content text,
     update_date timestamp with time zone DEFAULT now() NOT NULL
 );

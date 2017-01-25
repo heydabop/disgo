@@ -138,6 +138,7 @@ var (
 	ignoredUserIDs                    = make(map[[2]string]time.Time)
 	mutedUserIDs                      = make(map[[2]string]time.Time)
 	ownUserID                         string
+	ownUserIDint                      uint64
 	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
 	rouletteIsRed                     = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
 	rouletteBets                      = make(map[string][]UserBet)
@@ -739,7 +740,11 @@ func top(session *discordgo.Session, guildID, chanID, authorID, messageID string
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) AS num_messages FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' GROUP BY author_id ORDER BY count(author_id) DESC LIMIT $2`, chanID, limit)
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) AS num_messages FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' GROUP BY author_id ORDER BY count(author_id) DESC LIMIT $2`, chanIDint, limit)
 	if err != nil {
 		return "", err
 	}
@@ -778,7 +783,11 @@ func topLength(session *discordgo.Session, guildID, chanID, authorID, messageID 
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' AND trim(content) != ''`, chanID)
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%' AND trim(content) != ''`, chanIDint)
 	if err != nil {
 		return "", err
 	}
@@ -1016,7 +1025,11 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		outStr = match[1] + match[2]
 	}
 	var numRows int64
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), userID).Scan(&numRows); err != nil {
+	userIDint, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), userIDint).Scan(&numRows); err != nil {
 		return "", err
 	}
 	freshStr := "stale meme :-1:"
@@ -1057,7 +1070,11 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 		outStr = match[1] + match[2]
 	}
 	var numRows int64
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2 AND author_id != $3`, fmt.Sprintf("%%%s%%", outStr), chanID, ownUserID).Scan(&numRows); err != nil {
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2 AND author_id != $3`, fmt.Sprintf("%%%s%%", outStr), chanIDint, ownUserIDint).Scan(&numRows); err != nil {
 		return "", err
 	}
 	freshStr := "stale meme :-1:"
@@ -1294,7 +1311,11 @@ func wlist(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 			return "", err
 		}
 	}
-	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%'`, chanID)
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	rows, err := sqlClient.Query(`SELECT author_id, content FROM message WHERE chan_id = $1 AND content NOT LIKE '/%'`, chanIDint)
 	if err != nil {
 		return "", err
 	}
@@ -1342,7 +1363,15 @@ func wlist(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	var counts UserMessageLengths
 	for authorID, score := range countMap {
 		var numMessages int64
-		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1 AND author_id = $2 AND content NOT LIKE '/%'`, chanID, authorID).Scan(&numMessages); err != nil {
+		chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+		if err != nil {
+			return "", err
+		}
+		authorIDint, err := strconv.ParseUint(authorID, 10, 64)
+		if err != nil {
+			return "", err
+		}
+		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1 AND author_id = $2 AND content NOT LIKE '/%'`, chanIDint, authorIDint).Scan(&numMessages); err != nil {
 			return "", err
 		}
 		counts = append(counts, UserMessageLength{authorID, float64(score) / float64(numMessages)})
@@ -1487,8 +1516,12 @@ func remindme(session *discordgo.Session, guildID, chanID, authorID, messageID s
 
 func meme(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	var opID, link string
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
 	for {
-		if err := sqlClient.QueryRow(`SELECT author_id, content FROM message WHERE chan_id = $1 AND (content LIKE 'http://%' OR content LIKE 'https://%') AND author_id != $2 ORDER BY random() LIMIT 1`, chanID, ownUserID).Scan(&opID, &link); err != nil {
+		if err := sqlClient.QueryRow(`SELECT author_id, content FROM message WHERE chan_id = $1 AND (content LIKE 'http://%' OR content LIKE 'https://%') AND author_id != $2 ORDER BY random() LIMIT 1`, chanIDint, ownUserIDint).Scan(&opID, &link); err != nil {
 			return "", err
 		}
 		res, err := http.Head(link)
@@ -1582,7 +1615,15 @@ func lastUserMessage(session *discordgo.Session, guildID, chanID, authorID, mess
 		return "", errors.New("No user found")
 	}
 	var timeSent time.Time
-	if err := sqlClient.QueryRow("SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date DESC LIMIT 1", chanID, userID).Scan(&timeSent); err != nil {
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	userIDint, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	if err := sqlClient.QueryRow("SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date DESC LIMIT 1", chanIDint, userIDint).Scan(&timeSent); err != nil {
 		if err == sql.ErrNoRows {
 			return fmt.Sprintf("I've never seen %s say anything.", member.User.Username), nil
 		}
@@ -1842,6 +1883,10 @@ func activity(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return "", err
 	}
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
 	if len(args) > 0 {
 		var userID string
 		var err error
@@ -1857,9 +1902,13 @@ func activity(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		if err != nil {
 			return "", err
 		}
-		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date ASC`, chanID, userID)
+		userIDint, err := strconv.ParseUint(userID, 10, 64)
+		if err != nil {
+			return "", err
+		}
+		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date ASC`, chanIDint, userIDint)
 	} else {
-		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id != $2 ORDER BY create_date ASC`, chanID, ownUserID)
+		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id != $2 ORDER BY create_date ASC`, chanIDint, ownUserIDint)
 	}
 	if err != nil {
 		return "", err
@@ -2309,7 +2358,11 @@ func topcommand(session *discordgo.Session, guildID, chanID, authorID, messageID
 	if len(args) < 1 {
 		return "", errors.New("No command provided")
 	}
-	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) FROM message WHERE content LIKE $1 AND chan_id = $2 GROUP BY author_id ORDER BY count(author_id) DESC`, fmt.Sprintf(`/%s%%`, args[0]), chanID)
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	rows, err := sqlClient.Query(`SELECT author_id, count(author_id) FROM message WHERE content LIKE $1 AND chan_id = $2 GROUP BY author_id ORDER BY count(author_id) DESC`, fmt.Sprintf(`/%s%%`, args[0]), chanIDint)
 	if err != nil {
 		return "", err
 	}
@@ -2839,6 +2892,10 @@ func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	numMessages := Rand.Intn(5) + 3
 	var rows *sql.Rows
 	var err error
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
 	if len(args) > 0 {
 		var userID string
 		var err error
@@ -2850,11 +2907,15 @@ func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID 
 				return "", err
 			}
 		}
+		userIDint, err := strconv.ParseUint(userID, 10, 64)
+		if err != nil {
+			return "", err
+		}
 		rows, err = sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id = $2 AND length(content) > 0 AND content NOT LIKE '%
-%' ORDER BY random() LIMIT $3`, chanID, userID, numMessages)
+%' ORDER BY random() LIMIT $3`, chanIDint, userIDint, numMessages)
 	} else {
 		rows, err = sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id != $2 AND length(content) > 0 AND content NOT LIKE '%
-%' ORDER BY random() LIMIT $3`, chanID, ownUserID, numMessages)
+%' ORDER BY random() LIMIT $3`, chanIDint, ownUserIDint, numMessages)
 	}
 	if err != nil {
 		return "", err
@@ -2910,11 +2971,15 @@ func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID 
 
 func totalMessages(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	var messages uint64
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1`, chanID).Scan(&messages); err != nil {
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1`, chanIDint).Scan(&messages); err != nil {
 		return "", err
 	}
 	var firstTime time.Time
-	if err := sqlClient.QueryRow(`SELECT create_date FROM message WHERE chan_id = $1 ORDER BY create_date ASC LIMIT 1`, chanID).Scan(&firstTime); err != nil {
+	if err := sqlClient.QueryRow(`SELECT create_date FROM message WHERE chan_id = $1 ORDER BY create_date ASC LIMIT 1`, chanIDint).Scan(&firstTime); err != nil {
 		return "", err
 	}
 	timeSince := time.Since(firstTime)
@@ -3382,8 +3447,18 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println("ERROR parsing message ID " + err.Error())
 			return
 		}
+		chanID, err := strconv.ParseUint(m.ChannelID, 10, 64)
+		if err != nil {
+			fmt.Println("ERROR parsing channel ID " + err.Error())
+			return
+		}
+		authorID, err := strconv.ParseUint(m.Author.ID, 10, 64)
+		if err != nil {
+			fmt.Println("ERROR parsing author ID " + err.Error())
+			return
+		}
 		if _, err = sqlClient.Exec(`INSERT INTO message (id, chan_id, author_id, content) VALUES ($1, $2, $3, $4)`,
-			messageID, m.ChannelID, m.Author.ID, m.Content); err != nil {
+			messageID, chanID, authorID, m.Content); err != nil {
 			fmt.Println("ERROR inserting into Message")
 			fmt.Println(err.Error())
 		}
@@ -3885,6 +3960,11 @@ func main() {
 		return
 	}
 	ownUserID = self.ID
+	ownUserIDint, err = strconv.ParseUint(self.ID, 10, 64)
+	if err != nil {
+		fmt.Println("Failed to parse own ID " + err.Error())
+		return
+	}
 
 	client.AddHandler(makeMessageCreate())
 	client.AddHandler(handlePresenceUpdate)
