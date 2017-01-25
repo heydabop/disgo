@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 9.6rc1
--- Dumped by pg_dump version 9.6rc1
+-- Dumped from database version 9.6.1
+-- Dumped by pg_dump version 9.6.1
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -272,8 +272,8 @@ CREATE TABLE user_money (
 CREATE TABLE user_presence (
     id integer NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
-    guild_id character varying(30) NOT NULL,
-    user_id character varying(30) NOT NULL,
+    guild_id numeric NOT NULL,
+    user_id numeric NOT NULL,
     presence character varying(20) NOT NULL,
     game text
 );
