@@ -51,9 +51,11 @@ DROP TABLE IF EXISTS public.reminder;
 DROP SEQUENCE IF EXISTS public.own_username_id_seq;
 DROP TABLE IF EXISTS public.own_username;
 DROP TABLE IF EXISTS public.message;
+DROP TABLE IF EXISTS public.error;
 DROP SEQUENCE IF EXISTS public.discord_quote_id_seq;
 DROP TABLE IF EXISTS public.discord_quote;
 DROP FUNCTION IF EXISTS public.on_record_update();
+DROP EXTENSION IF EXISTS pgcrypto;
 DROP EXTENSION IF EXISTS plpgsql;
 DROP SCHEMA IF EXISTS public;
 --
@@ -82,6 +84,20 @@ CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
 --
 
 COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
+
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
 SET search_path = public, pg_catalog;
@@ -130,6 +146,20 @@ CREATE SEQUENCE discord_quote_id_seq
 --
 
 ALTER SEQUENCE discord_quote_id_seq OWNED BY discord_quote.id;
+
+
+--
+-- Name: error; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE error (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    create_date timestamp with time zone DEFAULT now() NOT NULL,
+    command text NOT NULL,
+    args text,
+    error text,
+    reported_count integer DEFAULT 0 NOT NULL
+);
 
 
 --

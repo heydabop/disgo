@@ -16,6 +16,7 @@ import (
 	"github.com/gyuho/goling/similar"
 	mcrcon "github.com/james4k/rcon"
 	_ "github.com/lib/pq"
+	"github.com/satori/go.uuid"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"image"
@@ -3197,7 +3198,7 @@ func dolphin(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	}
 	fields := []*discordgo.MessageEmbedField{&dolphinField, &configField}
 	thumbnail := discordgo.MessageEmbedThumbnail{
-		URL:    "https://silverfish.anex.us/dolphin.png",
+		URL:    fmt.Sprintf("%s/dolphin.png", httpRoot),
 		Width:  128,
 		Height: 71,
 	}
@@ -3421,7 +3422,11 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 			reply, err := cmd(s, guildID, m.ChannelID, m.Author.ID, m.ID, command[1:])
 			if err != nil {
-				message, msgErr := s.ChannelMessageSend(m.ChannelID, "⚠ `"+err.Error()+"`")
+				var errorID uuid.UUID
+				if sqlErr := sqlClient.QueryRow(`INSERT INTO error(command, args, error) VALUES ($1, $2, $3) RETURNING id`, command[0], strings.Join(command[1:], " "), err.Error()).Scan(&errorID); sqlErr != nil {
+					fmt.Println("ERROR recording error " + sqlErr.Error())
+				}
+				message, msgErr := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠ `%s`\nReport Error: %s/disgo_error?id=%s", err.Error(), httpRoot, errorID.String()))
 				if msgErr != nil {
 					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
 				} else {
@@ -3984,6 +3989,30 @@ func checkShipments(s *discordgo.Session) {
 	}
 }
 
+func reportError(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query()["id"]
+	if len(id) != 1 {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	errorID, err := uuid.FromString(id[0])
+	if err != nil {
+		fmt.Println(err)
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	if _, err := sqlClient.Exec(`UPDATE error SET reported_count = reported_count + 1 WHERE id = $1`, errorID); err != nil {
+		fmt.Println(err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write([]byte("Thank you!")); err != nil {
+		fmt.Println(err)
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+}
+
 func main() {
 	var err error
 	sqlClient, err = sql.Open("postgres", fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=%s", dbUser, dbPass, dbHost, dbPort, dbName, dbSslMode))
@@ -4150,6 +4179,11 @@ func main() {
 	time.AfterFunc(nextAllowance.Sub(now), giveAllowance)
 
 	time.AfterFunc(5*time.Minute, func() { checkShipments(client) })
+
+	http.HandleFunc("/disgo_error", reportError)
+	go func() {
+		fmt.Println(http.ListenAndServe(":8083", nil))
+	}()
 
 	select {}
 }
