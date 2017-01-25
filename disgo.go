@@ -26,7 +26,7 @@ import (
 	"io/ioutil"
 	"math"
 	"math/big"
-	"math/rand"
+	mrand "math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -41,83 +41,33 @@ import (
 	"time"
 )
 
-type Command func(*discordgo.Session, string, string, string, string, []string) (string, error)
+type commandFunc func(*discordgo.Session, string, string, string, string, []string) (string, error)
 
-type TwitchStreamReply struct {
-	Stream *struct {
-		ID         int     `json:"_id"`
-		AverageFps float64 `json:"average_fps"`
-		Game       string  `json:"game"`
-		Viewers    int     `json:"viewers"`
-		Channel    struct {
-			DisplayName string `json:"display_name"`
-			Name        string `json:"name"`
-			Status      string `json:"status"`
-		} `json:"channel"`
-		VideoHeight int `json:"video_height"`
-	} `json:"stream"`
-}
-
-type UserMessageLength struct {
+type stringFloatPair struct {
 	AuthorID  string
 	AvgLength float64
 }
 
-type WolframQueryResult struct {
-	Success bool `xml:"success,attr"`
-	Error   bool `xml:"error,attr"`
-	NumPods int  `xml:"numpods,attr"`
-	Pods    []struct {
-		Title     string `xml:"title,attr"`
-		Error     bool   `xml:"error,attr"`
-		Primary   *bool  `xml:"primary,attr"`
-		Plaintext string `xml:"subpod>plaintext"`
-	} `xml:"pod"`
-}
+type stringFloatPairs []stringFloatPair
 
-type UserMessageLengths []UserMessageLength
-
-func (u UserMessageLengths) Len() int {
+func (u stringFloatPairs) Len() int {
 	return len(u)
 }
-func (u UserMessageLengths) Less(i, j int) bool {
+func (u stringFloatPairs) Less(i, j int) bool {
 	return u[i].AvgLength-u[j].AvgLength > 0
 }
-func (u UserMessageLengths) Swap(i, j int) {
+func (u stringFloatPairs) Swap(i, j int) {
 	u[i], u[j] = u[j], u[i]
 }
 
-type SteamAppList struct {
-	Applist struct {
-		Apps []struct {
-			Appid int    `json:"appid"`
-			Name  string `json:"name"`
-		} `json:"apps"`
-	} `json:"applist"`
-}
-
-type RandomResponse struct {
-	Result struct {
-		Random struct {
-			Data []int `json:"data"`
-		} `json:"random"`
-	} `json:"result"`
-	ID int `json:"id"`
-}
-
-type UserBet struct {
+type userBet struct {
 	UserID         string
 	WinningNumbers []int
 	Payout         float64
 	Bet            float64
 }
 
-type DiscordError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
-type ShippoTrack struct {
+type shippoTrack struct {
 	Carrier        string `json:"carrier"`
 	TrackingNumber string `json:"tracking_number"`
 	TrackingStatus struct {
@@ -139,9 +89,9 @@ var (
 	mutedUserIDs                      = make(map[[2]string]time.Time)
 	ownUserID                         string
 	ownUserIDint                      uint64
-	Rand                              = rand.New(rand.NewSource(time.Now().UnixNano()))
+	rand                              = mrand.New(mrand.NewSource(time.Now().UnixNano()))
 	rouletteIsRed                     = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
-	rouletteBets                      = make(map[string][]UserBet)
+	rouletteBets                      = make(map[string][]userBet)
 	rouletteTableValues               = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
 	rouletteWheelSpinning             = make(map[string]bool)
 	rouletteWheelValues               = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
@@ -188,7 +138,10 @@ func getUsername(session *discordgo.Session, userID, guildID string) (string, er
 		commaIndex := strings.Index(errStr, ",")
 		if commaIndex != -1 {
 			jsonStr := errStr[commaIndex+1:]
-			var dErr DiscordError
+			var dErr struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			}
 			jErr := json.Unmarshal([]byte(jsonStr), &dErr)
 			if jErr != nil {
 				fmt.Println(jErr.Error())
@@ -241,7 +194,7 @@ func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (
 	return maxUserID, nil
 }
 
-func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.Time, int, float64, error) {
+func getGameTimesFromRows(rows *sql.Rows, limit int) (stringFloatPairs, time.Time, int, float64, error) {
 	userGame := make(map[string]string)
 	userTime := make(map[string]time.Time)
 	gameTime := make(map[string]float64)
@@ -251,7 +204,7 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 		var currTime time.Time
 		err := rows.Scan(&userID, &currTime, &game)
 		if err != nil {
-			return make(UserMessageLengths, 0), time.Now(), 0, 0, err
+			return make(stringFloatPairs, 0), time.Now(), 0, 0, err
 		}
 
 		if currTime.Before(firstTime) {
@@ -284,9 +237,9 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (UserMessageLengths, time.T
 		gameTime[game] += now.Sub(lastTime).Hours()
 	}
 	totalTime := float64(0)
-	gameTimes := make(UserMessageLengths, 0)
+	gameTimes := make(stringFloatPairs, 0)
 	for game, time := range gameTime {
-		gameTimes = append(gameTimes, UserMessageLength{game, time})
+		gameTimes = append(gameTimes, stringFloatPair{game, time})
 		totalTime += time
 	}
 	sort.Sort(&gameTimes)
@@ -373,7 +326,7 @@ func getMarkovFilelist(name string) (files []string, err error) {
 	return
 }
 
-func getShippoTrack(carrier, trackingNum string) (*ShippoTrack, error) {
+func getShippoTrack(carrier, trackingNum string) (*shippoTrack, error) {
 	client := http.Client{}
 	req, err := http.NewRequest(
 		"POST",
@@ -396,7 +349,7 @@ func getShippoTrack(carrier, trackingNum string) (*ShippoTrack, error) {
 	if err != nil {
 		return nil, err
 	}
-	var status ShippoTrack
+	var status shippoTrack
 	if err := json.Unmarshal(body, &status); err != nil {
 		return nil, err
 	}
@@ -493,7 +446,7 @@ func vote(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	}
 	if authorID != ownUserID {
 		lastVoteTime, validTime := voteTime[authorID]
-		if validTime && time.Since(lastVoteTime).Minutes() < 5+5*Rand.Float64() {
+		if validTime && time.Since(lastVoteTime).Minutes() < 5+5*rand.Float64() {
 			return "Slow down champ.", nil
 		}
 	}
@@ -678,7 +631,7 @@ func roll(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	rolls := make([]string, dice)
 	var result big.Int
 	for i := uint64(0); i < dice; i++ {
-		result.Rand(Rand, &max)
+		result.Rand(rand, &max)
 		result.Add(&result, one)
 		rolls[i] = result.Text(10)
 	}
@@ -716,7 +669,20 @@ func twitch(session *discordgo.Session, guildID, chanID, authorID, messageID str
 	if err != nil {
 		return "", err
 	}
-	var reply TwitchStreamReply
+	var reply struct {
+		Stream *struct {
+			ID         int     `json:"_id"`
+			AverageFps float64 `json:"average_fps"`
+			Game       string  `json:"game"`
+			Viewers    int     `json:"viewers"`
+			Channel    struct {
+				DisplayName string `json:"display_name"`
+				Name        string `json:"name"`
+				Status      string `json:"status"`
+			} `json:"channel"`
+			VideoHeight int `json:"video_height"`
+		} `json:"stream"`
+	}
 	err = json.Unmarshal(body, &reply)
 	if err != nil {
 		return "", err
@@ -808,9 +774,9 @@ func topLength(session *discordgo.Session, guildID, chanID, authorID, messageID 
 		messagesPerUser[authorID]++
 		wordsPerUser[authorID] += uint(len(strings.Fields(message)))
 	}
-	avgLengths := make(UserMessageLengths, 0)
+	avgLengths := make(stringFloatPairs, 0)
 	for userID, numMessages := range messagesPerUser {
-		avgLengths = append(avgLengths, UserMessageLength{userID, float64(wordsPerUser[userID]) / float64(numMessages)})
+		avgLengths = append(avgLengths, stringFloatPair{userID, float64(wordsPerUser[userID]) / float64(numMessages)})
 	}
 	sort.Sort(&avgLengths)
 	finalString := ""
@@ -854,7 +820,7 @@ func rename(session *discordgo.Session, guildID, chanID, authorID, messageID str
 		if err := sqlClient.QueryRow(`SELECT karma FROM user_karma WHERE guild_id = $1 AND user_id = $2`, guildID, authorID).Scan(&authorKarma); err != nil {
 			authorKarma = 0
 		}
-		newLockedMinutes := Rand.Intn(30) + 45 + 10*authorKarma
+		newLockedMinutes := rand.Intn(30) + 45 + 10*authorKarma
 		if newLockedMinutes < 30 {
 			newLockedMinutes = 30
 		}
@@ -945,7 +911,7 @@ func kickme(session *discordgo.Session, guildID, chanID, authorID, messageID str
 		return "", err
 	}
 	if perm&discordgo.PermissionKickMembers == discordgo.PermissionKickMembers {
-		time.AfterFunc(time.Second*time.Duration(Rand.Intn(6)+4), func() {
+		time.AfterFunc(time.Second*time.Duration(rand.Intn(6)+4), func() {
 			err := session.GuildMemberDelete(guildID, authorID)
 			if err != nil {
 				fmt.Println("ERROR in kickme", err)
@@ -1108,7 +1074,17 @@ func maths(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	if err != nil {
 		return "", err
 	}
-	var response WolframQueryResult
+	var response struct {
+		Success bool `xml:"success,attr"`
+		Error   bool `xml:"error,attr"`
+		NumPods int  `xml:"numpods,attr"`
+		Pods    []struct {
+			Title     string `xml:"title,attr"`
+			Error     bool   `xml:"error,attr"`
+			Primary   *bool  `xml:"primary,attr"`
+			Plaintext string `xml:"subpod>plaintext"`
+		} `xml:"pod"`
+	}
 	err = xml.Unmarshal(body, &response)
 	if err != nil {
 		return "", err
@@ -1208,7 +1184,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	}
 	currentVoiceTimers[guildID] = time.AfterFunc(30*time.Second, func() {
 		if currentVoiceSessions[guildID] != nil {
-			if Rand.Intn(3) == 0 {
+			if rand.Intn(3) == 0 {
 				dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3")
 				time.Sleep(1 * time.Second)
 			}
@@ -1227,7 +1203,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(52)
+		suh := rand.Intn(52)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
@@ -1297,7 +1273,7 @@ func topquote(session *discordgo.Session, guildID, chanID, authorID, messageID s
 
 func eightball(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	responses := []string{"It is certain", "It is decidedly so", "Without a doubt", "Yes, definitely", "You may rely on it", "As I see it, yes", "Most likely", "Outlook good", "Yes", "Signs point to yes", "Reply hazy try again", "Ask again later", "Better not tell you now", "Cannot predict now", "Concentrate and ask again", "Don't count on it", "My reply is no", "My sources say no", "Outlook not so good", "Very doubtful"}
-	return responses[Rand.Intn(len(responses))], nil
+	return responses[rand.Intn(len(responses))], nil
 }
 
 func wlist(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1360,7 +1336,7 @@ func wlist(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 			}
 		}
 	}
-	var counts UserMessageLengths
+	var counts stringFloatPairs
 	for authorID, score := range countMap {
 		var numMessages int64
 		chanIDint, err := strconv.ParseUint(chanID, 10, 64)
@@ -1374,7 +1350,7 @@ func wlist(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE chan_id = $1 AND author_id = $2 AND content NOT LIKE '/%'`, chanIDint, authorIDint).Scan(&numMessages); err != nil {
 			return "", err
 		}
-		counts = append(counts, UserMessageLength{authorID, float64(score) / float64(numMessages)})
+		counts = append(counts, stringFloatPair{authorID, float64(score) / float64(numMessages)})
 	}
 	if len(counts) == 0 {
 		return "You're all clean!", nil
@@ -1505,7 +1481,7 @@ func remindme(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	fmt.Println(remindTime.Format(time.RFC3339))
 	if remindTime.Before(now) {
 		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
-		return responses[Rand.Intn(len(responses))], nil
+		return responses[rand.Intn(len(responses))], nil
 	}
 	if _, err := sqlClient.Exec(`INSERT INTO reminder (chan_id, author_id, send_time, content) VALUES ($1, $2, $3, $4)`, chanID, authorID, remindTime.In(time.FixedZone("UTC", 0)), content); err != nil {
 		return "", err
@@ -1546,11 +1522,11 @@ func bitrate(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	if err != nil {
 		return "", err
 	}
-	var chanRates UserMessageLengths
+	var chanRates stringFloatPairs
 	longestChanLength := 0
 	for _, guildChan := range guildChans {
 		if guildChan != nil && guildChan.Type == "voice" {
-			chanRates = append(chanRates, UserMessageLength{guildChan.Name, float64(guildChan.Bitrate) / 1000})
+			chanRates = append(chanRates, stringFloatPair{guildChan.Name, float64(guildChan.Bitrate) / 1000})
 			if len(guildChan.Name) > longestChanLength {
 				longestChanLength = len(guildChan.Name)
 			}
@@ -2032,7 +2008,14 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		return "", errors.New(res.Status)
 	}
 	body, err := ioutil.ReadAll(res.Body)
-	var result RandomResponse
+	var result struct {
+		Result struct {
+			Random struct {
+				Data []int `json:"data"`
+			} `json:"random"`
+		} `json:"result"`
+		ID int `json:"id"`
+	}
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return "", err
@@ -2077,7 +2060,7 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		if len(rouletteBets[guildID]) > 0 && winner == false {
 			session.ChannelMessageSend(chanID, "Everyone loses!")
 		}
-		rouletteBets[guildID] = make([]UserBet, 0)
+		rouletteBets[guildID] = make([]userBet, 0)
 		rouletteWheelSpinning[guildID] = false
 	})
 	rouletteWheelSpinning[guildID] = true
@@ -2164,7 +2147,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if err != nil {
 			return "", err
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 35, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, spaces, 35, bet})
 	case "split":
 		if len(args) < 3 {
 			return "", errors.New("Missing number(s) in split bet")
@@ -2174,7 +2157,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 			return "", err
 		}
 		if (spaces[0] != spaces[1]) && (((spaces[0]-1)/3 == (spaces[1]-1)/3 && int(math.Abs(float64(spaces[1]-spaces[0]))) == 1) || int(math.Abs(float64(spaces[1]-spaces[0]))) == 3 || ((spaces[0] == 0 || spaces[1] == 0) && int(math.Abs(float64(spaces[1]-spaces[0]))) <= 3)) {
-			rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 17, bet})
+			rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, spaces, 17, bet})
 		} else {
 			return "", fmt.Errorf("Spaces %v aren't adjacent", spaces)
 		}
@@ -2197,7 +2180,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				}
 			}
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 11, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, spaces, 11, bet})
 	case "corner":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 4)
 		if err != nil {
@@ -2211,7 +2194,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		if spaces[1]-spaces[0] != 1 || spaces[3]-spaces[2] != 1 || (spaces[0]-1)/3 != (spaces[1]-1)/3 || (spaces[2]-1)/3 != (spaces[3]-1)/3 || ((spaces[2]-1)/3)-((spaces[0]-1)/3) != 1 || ((spaces[3]-1)/3)-((spaces[1]-1)/3) != 1 {
 			return "", fmt.Errorf("Spaces %v aren't all adjacent. Note that spaces should be entered in ascending order. 16 17 19 20 isn't treated the same as 19 20 16 17", spaces)
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 8, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, spaces, 8, bet})
 	case "six":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 2)
 		if err != nil {
@@ -2233,7 +2216,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				}
 			}
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 5, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 5, bet})
 	case "trio":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 2)
 		if err != nil {
@@ -2243,7 +2226,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 			return "", errors.New("Trio bet is only valid with 1 and 2 or 2 and 3")
 		}
 		spaces = append(spaces, 0)
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, spaces, 11, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, spaces, 11, bet})
 	case "low":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2253,7 +2236,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i := 0; i < 18; i++ {
 			betSpaces[i] = i + 1
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 1, bet})
 	case "high":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2263,7 +2246,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i := 0; i < 18; i++ {
 			betSpaces[i] = i + 19
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 1, bet})
 	case "red":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2275,7 +2258,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i+1)
 			}
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 1, bet})
 	case "black":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2287,7 +2270,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i+1)
 			}
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 1, bet})
 	case "even":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2299,7 +2282,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i)
 			}
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 1, bet})
 	case "odd":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
@@ -2311,7 +2294,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 				betSpaces = append(betSpaces, i)
 			}
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 1, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 1, bet})
 	case "dozen":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 1)
 		if err != nil {
@@ -2324,7 +2307,7 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i := 12 * (spaces[0] - 1); i < 12*spaces[0]; i++ {
 			betSpaces = append(betSpaces, i+1)
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 2, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 2, bet})
 	case "column":
 		bet, spaces, err = getBetDetails(guildID, authorID, betArgs, 1)
 		if err != nil {
@@ -2337,13 +2320,13 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 		for i, row := range rouletteTableValues {
 			betSpaces[i] = row[spaces[0]-1]
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, betSpaces, 2, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, betSpaces, 2, bet})
 	case "snake":
 		bet, _, err = getBetDetails(guildID, authorID, betArgs, 0)
 		if err != nil {
 			return "", err
 		}
-		rouletteBets[guildID] = append(rouletteBets[guildID], UserBet{authorID, []int{1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, 34}, 2, bet})
+		rouletteBets[guildID] = append(rouletteBets[guildID], userBet{authorID, []int{1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, 34}, 2, bet})
 	default:
 		return "", errors.New("Unrecognized bet type")
 	}
@@ -2673,7 +2656,7 @@ func voicekick(session *discordgo.Session, guildID, chanID, authorID, messageID 
 		return "I can't do that", nil
 	}
 
-	newChanName := fmt.Sprintf("kick-%04d", Rand.Intn(10000))
+	newChanName := fmt.Sprintf("kick-%04d", rand.Intn(10000))
 	newChan, err := session.GuildChannelCreate(guildID, newChanName, "voice")
 	if err != nil {
 		return "", err
@@ -2808,7 +2791,7 @@ func ooer(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	arg := []rune(strings.Join(args, " "))
 	var message []rune
 	for _, r := range arg {
-		message = append(message, r, rune(Rand.Intn(0x70)+0x300), rune(Rand.Intn(0x70)+0x300))
+		message = append(message, r, rune(rand.Intn(0x70)+0x300), rune(rand.Intn(0x70)+0x300))
 	}
 	return string(message), nil
 }
@@ -2889,7 +2872,7 @@ func gtext(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 }
 
 func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	numMessages := Rand.Intn(5) + 3
+	numMessages := rand.Intn(5) + 3
 	var rows *sql.Rows
 	var err error
 	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
@@ -3308,85 +3291,85 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
 	greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*(.+)$`)
-	funcMap := map[string]Command{
-		"spam":           Command(spam),
-		"soda":           Command(soda),
-		"lirik":          Command(lirik),
-		"forsen":         Command(forsen),
-		"roll":           Command(roll),
-		"help":           Command(help),
-		"upvote":         Command(upvote),
-		"downvote":       Command(downvote),
-		"votes":          Command(votes),
-		"karma":          Command(votes),
-		"uptime":         Command(uptime),
-		"twitch":         Command(twitch),
-		"top":            Command(top),
-		"toplength":      Command(topLength),
-		"rename":         Command(rename),
-		"lastseen":       Command(lastseen),
-		"delete":         Command(deleteLastMessage),
-		"cwc":            Command(cwc),
-		"kickme":         Command(kickme),
-		"spamuser":       Command(spamuser),
-		"math":           Command(maths),
-		"cputemp":        Command(cputemp),
-		"ayy":            Command(ayy),
-		"spamdiscord":    Command(spamdiscord),
-		"ping":           Command(ping),
-		"xd":             Command(xd),
-		"asuh":           Command(asuh),
-		"upquote":        Command(upquote),
-		"uq":             Command(upquote),
-		"topquote":       Command(topquote),
-		"8ball":          Command(eightball),
-		"oddshot":        Command(oddshot),
-		"remindme":       Command(remindme),
-		"meme":           Command(meme),
-		"bitrate":        Command(bitrate),
-		"commands":       Command(help),
-		"command":        Command(help),
-		"age":            Command(age),
-		"lastmessage":    Command(lastUserMessage),
-		"reminders":      Command(reminders),
-		"color":          Command(color),
-		"playtime":       Command(playtime),
-		"recentplaytime": Command(recentPlaytime),
-		"activity":       Command(activity),
-		"botuptime":      Command(botuptime),
-		"nest":           Command(nest),
-		"minecraft":      Command(minecraft),
-		"roulette":       Command(roulette),
-		"bet":            Command(bet),
-		"spin":           Command(roulette),
-		"topcommand":     Command(topcommand),
-		"money":          Command(money),
-		"gameactivity":   Command(gameactivity),
-		"invite":         Command(invite),
-		"updateavatar":   Command(updateAvatar),
-		"lastplayed":     Command(lastPlayed),
-		"whois":          Command(whois),
-		"starbound":      Command(starbound),
-		"permission":     Command(permission),
-		"voicekick":      Command(voicekick),
-		"toponline":      Command(topOnline),
-		"ooer":           Command(ooer),
-		"zalgo":          Command(ooer),
-		"timeout":        Command(timeout),
-		"serverage":      Command(serverAge),
-		"kms":            Command(kickme),
-		"track":          Command(track),
-		"greentext":      Command(greentext),
-		"messages":       Command(totalMessages),
-		"servers":        Command(totalServers),
-		"source":         Command(source),
-		"jpg":            Command(jpg),
-		"ascii":          Command(ascii),
-		"ignore":         Command(ignore),
-		"mute":           Command(mute),
-		"dolphin":        Command(dolphin),
-		"fortune":        Command(fortune),
-		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): Command(wlist),
+	funcMap := map[string]commandFunc{
+		"spam":           commandFunc(spam),
+		"soda":           commandFunc(soda),
+		"lirik":          commandFunc(lirik),
+		"forsen":         commandFunc(forsen),
+		"roll":           commandFunc(roll),
+		"help":           commandFunc(help),
+		"upvote":         commandFunc(upvote),
+		"downvote":       commandFunc(downvote),
+		"votes":          commandFunc(votes),
+		"karma":          commandFunc(votes),
+		"uptime":         commandFunc(uptime),
+		"twitch":         commandFunc(twitch),
+		"top":            commandFunc(top),
+		"toplength":      commandFunc(topLength),
+		"rename":         commandFunc(rename),
+		"lastseen":       commandFunc(lastseen),
+		"delete":         commandFunc(deleteLastMessage),
+		"cwc":            commandFunc(cwc),
+		"kickme":         commandFunc(kickme),
+		"spamuser":       commandFunc(spamuser),
+		"math":           commandFunc(maths),
+		"cputemp":        commandFunc(cputemp),
+		"ayy":            commandFunc(ayy),
+		"spamdiscord":    commandFunc(spamdiscord),
+		"ping":           commandFunc(ping),
+		"xd":             commandFunc(xd),
+		"asuh":           commandFunc(asuh),
+		"upquote":        commandFunc(upquote),
+		"uq":             commandFunc(upquote),
+		"topquote":       commandFunc(topquote),
+		"8ball":          commandFunc(eightball),
+		"oddshot":        commandFunc(oddshot),
+		"remindme":       commandFunc(remindme),
+		"meme":           commandFunc(meme),
+		"bitrate":        commandFunc(bitrate),
+		"commands":       commandFunc(help),
+		"command":        commandFunc(help),
+		"age":            commandFunc(age),
+		"lastmessage":    commandFunc(lastUserMessage),
+		"reminders":      commandFunc(reminders),
+		"color":          commandFunc(color),
+		"playtime":       commandFunc(playtime),
+		"recentplaytime": commandFunc(recentPlaytime),
+		"activity":       commandFunc(activity),
+		"botuptime":      commandFunc(botuptime),
+		"nest":           commandFunc(nest),
+		"minecraft":      commandFunc(minecraft),
+		"roulette":       commandFunc(roulette),
+		"bet":            commandFunc(bet),
+		"spin":           commandFunc(roulette),
+		"topcommand":     commandFunc(topcommand),
+		"money":          commandFunc(money),
+		"gameactivity":   commandFunc(gameactivity),
+		"invite":         commandFunc(invite),
+		"updateavatar":   commandFunc(updateAvatar),
+		"lastplayed":     commandFunc(lastPlayed),
+		"whois":          commandFunc(whois),
+		"starbound":      commandFunc(starbound),
+		"permission":     commandFunc(permission),
+		"voicekick":      commandFunc(voicekick),
+		"toponline":      commandFunc(topOnline),
+		"ooer":           commandFunc(ooer),
+		"zalgo":          commandFunc(ooer),
+		"timeout":        commandFunc(timeout),
+		"serverage":      commandFunc(serverAge),
+		"kms":            commandFunc(kickme),
+		"track":          commandFunc(track),
+		"greentext":      commandFunc(greentext),
+		"messages":       commandFunc(totalMessages),
+		"servers":        commandFunc(totalServers),
+		"source":         commandFunc(source),
+		"jpg":            commandFunc(jpg),
+		"ascii":          commandFunc(ascii),
+		"ignore":         commandFunc(ignore),
+		"mute":           commandFunc(mute),
+		"dolphin":        commandFunc(dolphin),
+		"fortune":        commandFunc(fortune),
+		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
 	executeCommand := func(s *discordgo.Session, guildID string, m *discordgo.MessageCreate, command []string) bool {
@@ -3515,10 +3498,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 		}
 		if match := meanRegex.FindString(m.Content); match != "" {
-			respond := Rand.Intn(3)
+			respond := rand.Intn(3)
 			if respond == 0 {
 				responses := []string{":(", "ayy fuck you too", "asshole.", "<@" + m.Author.ID + "> --"}
-				_, err := s.ChannelMessageSend(m.ChannelID, responses[Rand.Intn(len(responses))])
+				_, err := s.ChannelMessageSend(m.ChannelID, responses[rand.Intn(len(responses))])
 				if err != nil {
 					fmt.Println("Error sending response " + err.Error())
 				}
@@ -3587,7 +3570,14 @@ func initGameUpdater(s *discordgo.Session) {
 		return
 	}
 	res.Body.Close()
-	var applist SteamAppList
+	var applist struct {
+		Applist struct {
+			Apps []struct {
+				Appid int    `json:"appid"`
+				Name  string `json:"name"`
+			} `json:"apps"`
+		} `json:"applist"`
+	}
 	err = json.Unmarshal(body, &applist)
 	if err != nil {
 		fmt.Println(err.Error())
@@ -3599,19 +3589,19 @@ func initGameUpdater(s *discordgo.Session) {
 		gamelist[i] = app.Name
 	}
 
-	time.AfterFunc(time.Duration(960+Rand.Intn(600))*time.Second, func() { updateGame(s) })
+	time.AfterFunc(time.Duration(960+rand.Intn(600))*time.Second, func() { updateGame(s) })
 }
 
 func updateGame(s *discordgo.Session) {
-	defer time.AfterFunc(time.Duration(960+Rand.Intn(600))*time.Second, func() { updateGame(s) })
+	defer time.AfterFunc(time.Duration(960+rand.Intn(600))*time.Second, func() { updateGame(s) })
 	if currentGame != "" {
-		changeGame := Rand.Intn(3)
+		changeGame := rand.Intn(3)
 		if changeGame != 0 {
 			return
 		}
 		currentGame = ""
 	} else {
-		index := Rand.Intn(len(gamelist) * 5)
+		index := rand.Intn(len(gamelist) * 5)
 		if index >= len(gamelist) {
 			currentGame = ""
 		} else {
@@ -3662,10 +3652,10 @@ func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
 	if t.UserID == ownUserID {
 		return
 	}
-	if _, timerExists := typingTimer[t.UserID]; !timerExists && Rand.Intn(20) == 0 {
+	if _, timerExists := typingTimer[t.UserID]; !timerExists && rand.Intn(20) == 0 {
 		typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
 			responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
-			responseID := Rand.Intn(len(responses))
+			responseID := rand.Intn(len(responses))
 			s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseID]))
 		})
 	}
