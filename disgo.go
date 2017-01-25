@@ -1210,7 +1210,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := Rand.Intn(47)
+		suh := Rand.Intn(52)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
