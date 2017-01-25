@@ -17,6 +17,7 @@ SET row_security = off;
 SET search_path = public, pg_catalog;
 
 ALTER TABLE IF EXISTS ONLY public.vote DROP CONSTRAINT IF EXISTS vote_message_id_fkey;
+ALTER TABLE IF EXISTS ONLY public.error_ip DROP CONSTRAINT IF EXISTS error_ip_error_id_fkey;
 DROP TRIGGER IF EXISTS message_update ON public.message;
 ALTER TABLE IF EXISTS ONLY public.vote DROP CONSTRAINT IF EXISTS vote_pkey;
 ALTER TABLE IF EXISTS ONLY public.voice_state DROP CONSTRAINT IF EXISTS voice_state_pkey;
@@ -28,6 +29,8 @@ ALTER TABLE IF EXISTS ONLY public.shipment DROP CONSTRAINT IF EXISTS shipment_ca
 ALTER TABLE IF EXISTS ONLY public.reminder DROP CONSTRAINT IF EXISTS reminder_pkey;
 ALTER TABLE IF EXISTS ONLY public.own_username DROP CONSTRAINT IF EXISTS own_username_pkey;
 ALTER TABLE IF EXISTS ONLY public.message DROP CONSTRAINT IF EXISTS message_pkey;
+ALTER TABLE IF EXISTS ONLY public.error DROP CONSTRAINT IF EXISTS error_pkey;
+ALTER TABLE IF EXISTS ONLY public.error_ip DROP CONSTRAINT IF EXISTS error_ip_error_id_ip_key;
 ALTER TABLE IF EXISTS ONLY public.discord_quote DROP CONSTRAINT IF EXISTS discord_quote_pkey;
 ALTER TABLE IF EXISTS public.vote ALTER COLUMN id DROP DEFAULT;
 ALTER TABLE IF EXISTS public.voice_state ALTER COLUMN id DROP DEFAULT;
@@ -51,6 +54,7 @@ DROP TABLE IF EXISTS public.reminder;
 DROP SEQUENCE IF EXISTS public.own_username_id_seq;
 DROP TABLE IF EXISTS public.own_username;
 DROP TABLE IF EXISTS public.message;
+DROP TABLE IF EXISTS public.error_ip;
 DROP TABLE IF EXISTS public.error;
 DROP SEQUENCE IF EXISTS public.discord_quote_id_seq;
 DROP TABLE IF EXISTS public.discord_quote;
@@ -159,6 +163,16 @@ CREATE TABLE error (
     args text,
     error text,
     reported_count integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: error_ip; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE error_ip (
+    error_id uuid NOT NULL,
+    ip inet NOT NULL
 );
 
 
@@ -458,6 +472,22 @@ ALTER TABLE ONLY discord_quote
 
 
 --
+-- Name: error_ip error_ip_error_id_ip_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY error_ip
+    ADD CONSTRAINT error_ip_error_id_ip_key UNIQUE (error_id, ip);
+
+
+--
+-- Name: error error_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY error
+    ADD CONSTRAINT error_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: message message_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -542,6 +572,14 @@ ALTER TABLE ONLY vote
 --
 
 CREATE TRIGGER message_update BEFORE UPDATE ON message FOR EACH ROW EXECUTE PROCEDURE on_record_update();
+
+
+--
+-- Name: error_ip error_ip_error_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY error_ip
+    ADD CONSTRAINT error_ip_error_id_fkey FOREIGN KEY (error_id) REFERENCES error(id);
 
 
 --

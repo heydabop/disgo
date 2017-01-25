@@ -3992,6 +3992,7 @@ func checkShipments(s *discordgo.Session) {
 func reportError(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query()["id"]
 	if len(id) != 1 {
+		fmt.Println("id doesn't have 1 value")
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
@@ -3999,6 +4000,21 @@ func reportError(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Println(err)
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	xForwardedFor := r.Header["X-Forwarded-For"]
+	if len(xForwardedFor) != 1 {
+		fmt.Println("X-Forward-For doesn't have 1 value")
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+	sourceIP := xForwardedFor[0]
+	if _, err := sqlClient.Exec(`INSERT INTO error_ip(error_id, ip) VALUES ($1, $2)`, errorID, sourceIP); err != nil {
+		fmt.Println(err)
+		if _, err := w.Write([]byte("Thank you!")); err != nil {
+			fmt.Println(err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		}
 		return
 	}
 	if _, err := sqlClient.Exec(`UPDATE error SET reported_count = reported_count + 1 WHERE id = $1`, errorID); err != nil {
