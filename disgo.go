@@ -165,28 +165,31 @@ func getMostSimilarUserID(session *discordgo.Session, chanID, username string) (
 	if err != nil {
 		return "", err
 	}
-	var similarUsers []discordgo.User
+	var similarUsers [][2]string
 	lowerUsername := strings.ToLower(username)
 	if guild.Members != nil {
 		for _, member := range guild.Members {
 			if user := member.User; user != nil {
-				if strings.Contains(strings.ToLower(user.Username), lowerUsername) {
-					similarUsers = append(similarUsers, *user)
+				if lname := strings.ToLower(user.Username); strings.Contains(lname, lowerUsername) {
+					similarUsers = append(similarUsers, [2]string{lname, user.ID})
 				}
+			}
+			if lname := strings.ToLower(member.Nick); len(lname) > 0 && strings.Contains(lname, lowerUsername) {
+				similarUsers = append(similarUsers, [2]string{lname, member.User.ID})
 			}
 		}
 	}
 	if len(similarUsers) == 1 {
-		return similarUsers[0].ID, nil
+		return similarUsers[0][1], nil
 	}
 	maxSim := 0.0
 	maxUserID := ""
 	usernameBytes := []byte(lowerUsername)
 	for _, user := range similarUsers {
-		sim := similar.Cosine([]byte(strings.ToLower(user.Username)), usernameBytes)
+		sim := similar.Cosine([]byte(strings.ToLower(user[0])), usernameBytes)
 		if sim > maxSim {
 			maxSim = sim
-			maxUserID = user.ID
+			maxUserID = user[1]
 		}
 	}
 	if maxUserID == "" {
