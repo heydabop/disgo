@@ -958,7 +958,7 @@ func kickme(session *discordgo.Session, guildID, chanID, authorID, messageID str
 	return "You wish.", nil
 }
 
-func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovVersion int) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
@@ -988,7 +988,7 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
+	cmd := exec.Command(fmt.Sprintf("/home/ross/markov/%d-markov.out", markovVersion), "1")
 	logs, err := os.Open("/home/ross/markov/" + userID + "_custom")
 	if err != nil {
 		return "", err
@@ -1024,7 +1024,15 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	return fmt.Sprintf("%s: %s\n%s", username, freshStr, outStr), nil
 }
 
-func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+func spamuser1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return spamuser(session, guildID, chanID, authorID, messageID, args, 1)
+}
+
+func spamuser2(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return spamuser(session, guildID, chanID, authorID, messageID, args, 2)
+}
+
+func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovVersion int) (string, error) {
 	realChanID, err := strconv.ParseUint(chanID, 10, 64)
 	if err != nil {
 		return "", err
@@ -1033,7 +1041,7 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("/home/ross/markov/1-markov.out", "1")
+	cmd := exec.Command(fmt.Sprintf("/home/ross/markov/%d-markov.out", markovVersion), "1")
 	logs, err := os.Open("/home/ross/markov/chan_" + chanID + "_custom")
 	if err != nil {
 		return "", err
@@ -1067,6 +1075,14 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 		userIDUpQuotes[chanID] = make([]string, 0)
 	}
 	return fmt.Sprintf("%s\n%s", freshStr, outStr), nil
+}
+
+func spamdiscord1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return spamdiscord(session, guildID, chanID, authorID, messageID, args, 1)
+}
+
+func spamdiscord2(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return spamdiscord(session, guildID, chanID, authorID, messageID, args, 2)
 }
 
 func maths(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3355,11 +3371,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"delete":         commandFunc(deleteLastMessage),
 		"cwc":            commandFunc(cwc),
 		"kickme":         commandFunc(kickme),
-		"spamuser":       commandFunc(spamuser),
+		"spamuser":       commandFunc(spamuser1),
+		"spamuser2":      commandFunc(spamuser2),
 		"math":           commandFunc(maths),
 		"cputemp":        commandFunc(cputemp),
 		"ayy":            commandFunc(ayy),
-		"spamdiscord":    commandFunc(spamdiscord),
+		"spamdiscord":    commandFunc(spamdiscord1),
+		"spamdiscord2":   commandFunc(spamdiscord2),
 		"ping":           commandFunc(ping),
 		"xd":             commandFunc(xd),
 		"asuh":           commandFunc(asuh),
