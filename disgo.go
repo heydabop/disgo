@@ -1231,7 +1231,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := rand.Intn(53)
+		suh := rand.Intn(54)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
@@ -3293,7 +3293,9 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	_, err = session.ChannelMessageSend(privateChannel.ID, `**serverAge** - displays how long ago this server was created
 **spam** [streamer (optional)] - generates a messages based on logs from <streamer>, shows all streamer logs if no streamer is specified
 **spamdiscord** - generates a message based on logs from this discord channel
+**spamdiscord2** - generates a message based on logs from this discord channel, less "creative" than spamdiscord but generally less nonsense
 **spamuser** [username] - generates a message based on discord logs of <username>
+**spamuser2** [username] - generates a message based on discord logs of <username>, less "creative" than spamuser but generally less nonsense
 **spin** or **roulette** - spin roulette wheel
 **soda** - alias for /spam sodapoppin
 **source** - link to bot source code on github
