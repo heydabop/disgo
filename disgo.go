@@ -14,6 +14,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/chuckpreslar/rcon"
 	"github.com/gyuho/goling/similar"
+	"github.com/heydabop/disgo/markov"
 	mcrcon "github.com/james4k/rcon"
 	_ "github.com/lib/pq"
 	"github.com/satori/go.uuid"
@@ -1226,16 +1227,16 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	})
 
 	time.Sleep(1 * time.Second)
+	session.ChannelMessageDelete(chanID, messageID)
 	for i := 0; i < 10; i++ {
 		if currentVoiceSessions[guildID].Ready == false || currentVoiceSessions[guildID].OpusSend == nil {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := rand.Intn(56)
+		suh := rand.Intn(57)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh%d.mp3", suh))
 		break
 	}
-	session.ChannelMessageDelete(chanID, messageID)
 	return "", nil
 }
 
@@ -3242,6 +3243,72 @@ func fortune(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	return string(out), nil
 }
 
+func markovspam(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", errors.New("No username provided")
+	}
+	var userID string
+	var err error
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		userID = match[1]
+	} else {
+		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+		if err != nil {
+			return "", err
+		}
+	}
+	username, err := getUsername(session, userID, guildID)
+	if err != nil {
+		return "", err
+	}
+	realChanID, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	realUserID, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id = $2`, realChanID, realUserID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	var corpus []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return "", err
+		}
+		corpus = append(corpus, line)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	outStr := markov.GenFirstOrder(corpus)
+
+	var numRows int64
+	userIDint, err := strconv.ParseUint(userID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), userIDint).Scan(&numRows); err != nil {
+		return "", err
+	}
+	freshStr := "stale meme :-1:"
+	if numRows == 0 {
+		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
+	}
+	var quoteID int64
+	if err := sqlClient.QueryRow(`INSERT INTO discord_quote(chan_id, author_id, content, score, is_fresh) VALUES ($1, $2, $3, 0, $4) RETURNING id`, chanID, userID, outStr, numRows == 0).Scan(&quoteID); err != nil {
+		fmt.Println("ERROR inserting into DiscordQuote ", err.Error())
+	} else {
+		lastQuoteIDs[chanID] = quoteID
+		userIDUpQuotes[chanID] = make([]string, 0)
+	}
+	return fmt.Sprintf("%s: %s\n%s", username, freshStr, outStr), nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3433,6 +3500,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"mute":           commandFunc(mute),
 		"dolphin":        commandFunc(dolphin),
 		"fortune":        commandFunc(fortune),
+		"markov":         commandFunc(markovspam),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
