@@ -21,6 +21,7 @@ var (
 	startPair = [2]string{zero, start}
 )
 
+//GenFirstOrder returns a random sentence generated from first-order markov chains made from the input corpus
 func GenFirstOrder(corpus []string) string {
 	graph := make(map[string][]string)
 	graph[start] = make([]string, 0)
@@ -68,6 +69,7 @@ func GenFirstOrder(corpus []string) string {
 	return strings.Join(words, " ")
 }
 
+//GenSecondOrder returns a random sentence generated from first-order markov chains made from the input corpus
 func GenSecondOrder(corpus []string) string {
 	graph := make(map[[2]string][][2]string)
 	graph[startPair] = make([][2]string, 0)

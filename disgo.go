@@ -959,7 +959,7 @@ func kickme(session *discordgo.Session, guildID, chanID, authorID, messageID str
 	return "You wish.", nil
 }
 
-func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovVersion int) (string, error) {
+func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovOrder int) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
@@ -985,24 +985,32 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return "", err
 	}
-	err = exec.Command("bash", "./gen_custom_log.sh", fmt.Sprintf("%d", realChanID), fmt.Sprintf("%d", realUserID)).Run()
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id = $2`, realChanID, realUserID)
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command(fmt.Sprintf("/home/ross/markov/%d-markov.out", markovVersion), "1")
-	logs, err := os.Open("/home/ross/markov/" + userID + "_custom")
-	if err != nil {
+	defer rows.Close()
+	var corpus []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return "", err
+		}
+		corpus = append(corpus, line)
+	}
+	if err := rows.Err(); err != nil {
 		return "", err
 	}
-	cmd.Stdin = logs
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
+
+	outStr := ""
+	if markovOrder == 1 {
+		outStr = markov.GenFirstOrder(corpus)
+	} else if markovOrder == 2 {
+		outStr = markov.GenSecondOrder(corpus)
+	} else {
+		return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
 	}
-	outStr := strings.TrimSpace(string(out))
-	if match := regexp.MustCompile(`^(.*) ([[:punct:]])$`).FindStringSubmatch(outStr); match != nil {
-		outStr = match[1] + match[2]
-	}
+
 	var numRows int64
 	userIDint, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
@@ -3243,86 +3251,6 @@ func fortune(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	return string(out), nil
 }
 
-func markovspam1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	return markovspam(session, guildID, chanID, authorID, messageID, args, 1)
-}
-
-func markovspam2(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	return markovspam(session, guildID, chanID, authorID, messageID, args, 2)
-}
-
-func markovspam(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, order int) (string, error) {
-	if len(args) < 1 {
-		return "", errors.New("No username provided")
-	}
-	var userID string
-	var err error
-	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
-		userID = match[1]
-	} else {
-		userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
-		if err != nil {
-			return "", err
-		}
-	}
-	username, err := getUsername(session, userID, guildID)
-	if err != nil {
-		return "", err
-	}
-	realChanID, err := strconv.ParseUint(chanID, 10, 64)
-	if err != nil {
-		return "", err
-	}
-	realUserID, err := strconv.ParseUint(userID, 10, 64)
-	if err != nil {
-		return "", err
-	}
-	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id = $2`, realChanID, realUserID)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	var corpus []string
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
-			return "", err
-		}
-		corpus = append(corpus, line)
-	}
-	if err := rows.Err(); err != nil {
-		return "", err
-	}
-
-	outStr := ""
-	if order == 1 {
-		outStr = markov.GenFirstOrder(corpus)
-	} else if order == 2 {
-		outStr = markov.GenSecondOrder(corpus)
-	}
-
-	var numRows int64
-	userIDint, err := strconv.ParseUint(userID, 10, 64)
-	if err != nil {
-		return "", err
-	}
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), userIDint).Scan(&numRows); err != nil {
-		return "", err
-	}
-	freshStr := "stale meme :-1:"
-	if numRows == 0 {
-		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
-	}
-	var quoteID int64
-	if err := sqlClient.QueryRow(`INSERT INTO discord_quote(chan_id, author_id, content, score, is_fresh) VALUES ($1, $2, $3, 0, $4) RETURNING id`, chanID, userID, outStr, numRows == 0).Scan(&quoteID); err != nil {
-		fmt.Println("ERROR inserting into DiscordQuote ", err.Error())
-	} else {
-		lastQuoteIDs[chanID] = quoteID
-		userIDUpQuotes[chanID] = make([]string, 0)
-	}
-	return fmt.Sprintf("%s: %s\n%s", username, freshStr, outStr), nil
-}
-
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3514,8 +3442,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"mute":           commandFunc(mute),
 		"dolphin":        commandFunc(dolphin),
 		"fortune":        commandFunc(fortune),
-		"markov":         commandFunc(markovspam1),
-		"markov2":        commandFunc(markovspam2),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
