@@ -1,14 +1,24 @@
 package markov
 
 import (
-	"math/rand"
+	mrand "math/rand"
 	"strings"
+	"time"
 	"unicode"
 )
 
 const (
-	start = "\x02"
-	end   = "\x03"
+	zero      = "\x00"
+	start     = "\x02"
+	end       = "\x03"
+	zeroRune  = rune('\x00')
+	startRune = rune('\x02')
+	endRune   = rune('\x02')
+)
+
+var (
+	rand      = mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	startPair = [2]string{zero, start}
 )
 
 func GenFirstOrder(corpus []string) string {
@@ -19,7 +29,7 @@ func GenFirstOrder(corpus []string) string {
 		words := strings.Fields(line)
 		for i, word := range words {
 			words[i] = strings.Map(func(r rune) rune {
-				if unicode.IsPunct(r) || r == '\x02' || r == '\x03' {
+				if unicode.IsPunct(r) || r == startRune || r == endRune {
 					return -1
 				}
 				return r
@@ -54,6 +64,60 @@ func GenFirstOrder(corpus []string) string {
 			break
 		}
 		words = append(words, word)
+	}
+	return strings.Join(words, " ")
+}
+
+func GenSecondOrder(corpus []string) string {
+	graph := make(map[[2]string][][2]string)
+	graph[startPair] = make([][2]string, 0)
+
+	for _, line := range corpus {
+		words := strings.Fields(line)
+		for i, word := range words {
+			words[i] = strings.Map(func(r rune) rune {
+				if unicode.IsPunct(r) || r == startRune || r == endRune || r == zeroRune {
+					return -1
+				}
+				return r
+			}, strings.ToLower(word))
+		}
+
+		for i, word := range words {
+			prevWord := start
+			nextWord := end
+			if i > 0 {
+				prevWord = words[i-1]
+			}
+			if i < len(words)-1 {
+				nextWord = words[i+1]
+			}
+			prevPair := [2]string{prevWord, word}
+			nextPair := [2]string{word, nextWord}
+
+			if _, found := graph[prevPair]; !found {
+				graph[prevPair] = make([][2]string, 0)
+			}
+
+			if i == 0 {
+				graph[startPair] = append(graph[startPair], prevPair)
+			}
+			graph[prevPair] = append(graph[prevPair], nextPair)
+		}
+	}
+
+	var words []string
+	pair := startPair
+	for {
+		max := len(graph[pair])
+		if max < 1 {
+			break
+		}
+		pair = graph[pair][rand.Intn(max)]
+		if pair[1] == end {
+			break
+		}
+		words = append(words, pair[1])
 	}
 	return strings.Join(words, " ")
 }

@@ -3243,7 +3243,15 @@ func fortune(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	return string(out), nil
 }
 
-func markovspam(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+func markovspam1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return markovspam(session, guildID, chanID, authorID, messageID, args, 1)
+}
+
+func markovspam2(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return markovspam(session, guildID, chanID, authorID, messageID, args, 2)
+}
+
+func markovspam(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, order int) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No username provided")
 	}
@@ -3285,7 +3293,13 @@ func markovspam(session *discordgo.Session, guildID, chanID, authorID, messageID
 	if err := rows.Err(); err != nil {
 		return "", err
 	}
-	outStr := markov.GenFirstOrder(corpus)
+
+	outStr := ""
+	if order == 1 {
+		outStr = markov.GenFirstOrder(corpus)
+	} else if order == 2 {
+		outStr = markov.GenSecondOrder(corpus)
+	}
 
 	var numRows int64
 	userIDint, err := strconv.ParseUint(userID, 10, 64)
@@ -3500,7 +3514,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"mute":           commandFunc(mute),
 		"dolphin":        commandFunc(dolphin),
 		"fortune":        commandFunc(fortune),
-		"markov":         commandFunc(markovspam),
+		"markov":         commandFunc(markovspam1),
+		"markov2":        commandFunc(markovspam2),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
