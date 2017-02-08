@@ -1003,24 +1003,22 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	}
 
 	outStr := ""
-	if markovOrder == 1 {
-		outStr = markov.GenFirstOrder(corpus)
-	} else if markovOrder == 2 {
-		outStr = markov.GenSecondOrder(corpus)
-	} else {
-		return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
-	}
+	numRows := int64(1)
+	for i := 0; i < 100 && numRows > 0; i++ {
+		if markovOrder == 1 {
+			outStr = markov.GenFirstOrder(corpus)
+		} else if markovOrder == 2 {
+			outStr = markov.GenSecondOrder(corpus)
+		} else {
+			return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
+		}
 
-	var numRows int64
-	if err != nil {
-		return "", err
-	}
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), realUserID).Scan(&numRows); err != nil {
-		return "", err
-	}
-	freshStr := "stale meme :-1:"
-	if numRows == 0 {
-		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
+		if err != nil {
+			return "", err
+		}
+		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), realUserID).Scan(&numRows); err != nil {
+			return "", err
+		}
 	}
 	var quoteID int64
 	if err := sqlClient.QueryRow(`INSERT INTO discord_quote(chan_id, author_id, content, score, is_fresh) VALUES ($1, $2, $3, 0, $4) RETURNING id`, chanID, userID, outStr, numRows == 0).Scan(&quoteID); err != nil {
@@ -1029,7 +1027,7 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		lastQuoteIDs[chanID] = quoteID
 		userIDUpQuotes[chanID] = make([]string, 0)
 	}
-	return fmt.Sprintf("%s: %s\n%s", username, freshStr, outStr), nil
+	return fmt.Sprintf("%s\n%s", username, outStr), nil
 }
 
 func spamuser1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1063,24 +1061,22 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 	}
 
 	outStr := ""
-	if markovOrder == 1 {
-		outStr = markov.GenFirstOrder(corpus)
-	} else if markovOrder == 2 {
-		outStr = markov.GenSecondOrder(corpus)
-	} else {
-		return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
-	}
+	numRows := int64(1)
+	for i := 0; i < 100 && numRows > 0; i++ {
+		if markovOrder == 1 {
+			outStr = markov.GenFirstOrder(corpus)
+		} else if markovOrder == 2 {
+			outStr = markov.GenSecondOrder(corpus)
+		} else {
+			return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
+		}
 
-	var numRows int64
-	if err != nil {
-		return "", err
-	}
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2`, fmt.Sprintf("%%%s%%", outStr), realChanID).Scan(&numRows); err != nil {
-		return "", err
-	}
-	freshStr := "stale meme :-1:"
-	if numRows == 0 {
-		freshStr = "💯％ CERTIFIED ＦＲＥＳＨ 👌"
+		if err != nil {
+			return "", err
+		}
+		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2`, fmt.Sprintf("%%%s%%", outStr), realChanID).Scan(&numRows); err != nil {
+			return "", err
+		}
 	}
 	var quoteID int64
 	if err := sqlClient.QueryRow(`INSERT INTO discord_quote(chan_id, content, score, is_fresh) values ($1, $2, 0, $3) RETURNING id`, chanID, outStr, numRows == 0).Scan(&quoteID); err != nil {
@@ -1089,7 +1085,7 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 		lastQuoteIDs[chanID] = quoteID
 		userIDUpQuotes[chanID] = make([]string, 0)
 	}
-	return fmt.Sprintf("%s\n%s", freshStr, outStr), nil
+	return fmt.Sprintf("%s", outStr), nil
 }
 
 func spamdiscord1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
