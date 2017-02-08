@@ -20,13 +20,27 @@ var (
 	startPair = [2]string{zero, start}
 )
 
+func prune(words []string) []string {
+	for i, word := range words {
+		words[i] = strings.Map(func(r rune) rune {
+			if r == startRune || r == endRune || r == zeroRune {
+				return -1
+			}
+			return r
+		}, word)
+	}
+
+	return words
+}
+
 //GenFirstOrder returns a random sentence generated from first-order markov chains made from the input corpus
 func GenFirstOrder(corpus []string) string {
 	graph := make(map[string][]string)
 	graph[start] = make([]string, 0)
 
 	for _, line := range corpus {
-		words := strings.Fields(line)
+		words := prune(strings.Fields(line))
+
 		for i, word := range words {
 			if i == 0 {
 				graph[start] = append(graph[start], word)
@@ -65,7 +79,8 @@ func GenSecondOrder(corpus []string) string {
 	graph[startPair] = make([][2]string, 0)
 
 	for _, line := range corpus {
-		words := strings.Fields(line)
+		words := prune(strings.Fields(line))
+
 		for i, word := range words {
 			prevWord := start
 			nextWord := end
