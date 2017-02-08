@@ -4,7 +4,6 @@ import (
 	mrand "math/rand"
 	"strings"
 	"time"
-	"unicode"
 )
 
 const (
@@ -28,15 +27,6 @@ func GenFirstOrder(corpus []string) string {
 
 	for _, line := range corpus {
 		words := strings.Fields(line)
-		for i, word := range words {
-			words[i] = strings.Map(func(r rune) rune {
-				if unicode.IsPunct(r) || r == startRune || r == endRune {
-					return -1
-				}
-				return r
-			}, strings.ToLower(word))
-		}
-
 		for i, word := range words {
 			if i == 0 {
 				graph[start] = append(graph[start], word)
@@ -76,15 +66,6 @@ func GenSecondOrder(corpus []string) string {
 
 	for _, line := range corpus {
 		words := strings.Fields(line)
-		for i, word := range words {
-			words[i] = strings.Map(func(r rune) rune {
-				if unicode.IsPunct(r) || r == startRune || r == endRune || r == zeroRune {
-					return -1
-				}
-				return r
-			}, strings.ToLower(word))
-		}
-
 		for i, word := range words {
 			prevWord := start
 			nextWord := end
