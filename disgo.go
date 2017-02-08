@@ -1012,11 +1012,10 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	}
 
 	var numRows int64
-	userIDint, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
 		return "", err
 	}
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), userIDint).Scan(&numRows); err != nil {
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND author_id = $2`, fmt.Sprintf("%%%s%%", outStr), realUserID).Scan(&numRows); err != nil {
 		return "", err
 	}
 	freshStr := "stale meme :-1:"
@@ -1041,35 +1040,42 @@ func spamuser2(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	return spamuser(session, guildID, chanID, authorID, messageID, args, 2)
 }
 
-func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovVersion int) (string, error) {
+func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovOrder int) (string, error) {
 	realChanID, err := strconv.ParseUint(chanID, 10, 64)
 	if err != nil {
 		return "", err
 	}
-	err = exec.Command("bash", "./gen_custom_log_by_chan.sh", fmt.Sprintf("%d", realChanID)).Run()
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND content != ''`, realChanID)
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command(fmt.Sprintf("/home/ross/markov/%d-markov.out", markovVersion), "1")
-	logs, err := os.Open("/home/ross/markov/chan_" + chanID + "_custom")
-	if err != nil {
+	defer rows.Close()
+	var corpus []string
+	for rows.Next() {
+		var line string
+		if err := rows.Scan(&line); err != nil {
+			return "", err
+		}
+		corpus = append(corpus, line)
+	}
+	if err := rows.Err(); err != nil {
 		return "", err
 	}
-	cmd.Stdin = logs
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
+
+	outStr := ""
+	if markovOrder == 1 {
+		outStr = markov.GenFirstOrder(corpus)
+	} else if markovOrder == 2 {
+		outStr = markov.GenSecondOrder(corpus)
+	} else {
+		return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
 	}
-	outStr := strings.TrimSpace(string(out))
-	if match := regexp.MustCompile(`^(.*) ([[:punct:]])$`).FindStringSubmatch(outStr); match != nil {
-		outStr = match[1] + match[2]
-	}
+
 	var numRows int64
-	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
 	if err != nil {
 		return "", err
 	}
-	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2 AND author_id != $3`, fmt.Sprintf("%%%s%%", outStr), chanIDint, ownUserIDint).Scan(&numRows); err != nil {
+	if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2`, fmt.Sprintf("%%%s%%", outStr), realChanID).Scan(&numRows); err != nil {
 		return "", err
 	}
 	freshStr := "stale meme :-1:"
