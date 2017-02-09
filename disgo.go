@@ -95,6 +95,7 @@ var (
 	rouletteIsRed                     = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
 	rouletteBets                      = make(map[string][]userBet)
 	rouletteTableValues               = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
+	rouletteWheelSpinningPending      = make(map[string]bool)
 	rouletteWheelSpinning             = make(map[string]bool)
 	rouletteWheelValues               = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
 	startTime                         = time.Now()
@@ -1005,11 +1006,14 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	outStr := ""
 	numRows := int64(1)
 	for i := 0; i < 100 && numRows > 0; i++ {
-		if markovOrder == 1 {
+		switch markovOrder {
+		case 1:
 			outStr = markov.GenFirstOrder(corpus)
-		} else if markovOrder == 2 {
+		case 2:
 			outStr = markov.GenSecondOrder(corpus)
-		} else {
+		case 3:
+			outStr = markov.GenThirdOrder(corpus)
+		default:
 			return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
 		}
 
@@ -1038,6 +1042,10 @@ func spamuser2(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	return spamuser(session, guildID, chanID, authorID, messageID, args, 2)
 }
 
+func spamuser3(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return spamuser(session, guildID, chanID, authorID, messageID, args, 3)
+}
+
 func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovOrder int) (string, error) {
 	realChanID, err := strconv.ParseUint(chanID, 10, 64)
 	if err != nil {
@@ -1063,11 +1071,14 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 	outStr := ""
 	numRows := int64(1)
 	for i := 0; i < 100 && numRows > 0; i++ {
-		if markovOrder == 1 {
+		switch markovOrder {
+		case 1:
 			outStr = markov.GenFirstOrder(corpus)
-		} else if markovOrder == 2 {
+		case 2:
 			outStr = markov.GenSecondOrder(corpus)
-		} else {
+		case 3:
+			outStr = markov.GenThirdOrder(corpus)
+		default:
 			return "", fmt.Errorf("Unrecognized markov order: %d", markovOrder)
 		}
 
@@ -1094,6 +1105,10 @@ func spamdiscord1(session *discordgo.Session, guildID, chanID, authorID, message
 
 func spamdiscord2(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	return spamdiscord(session, guildID, chanID, authorID, messageID, args, 2)
+}
+
+func spamdiscord3(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return spamdiscord(session, guildID, chanID, authorID, messageID, args, 3)
 }
 
 func maths(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2051,6 +2066,13 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return fmt.Sprintf("Please don't do that in here. Try <#190518994875318272>"), nil
 	}
+	if rouletteWheelSpinningPending[guildID] {
+		return "I'm working on it.", nil
+	}
+	rouletteWheelSpinningPending[guildID] = true
+	defer func() {
+		rouletteWheelSpinningPending[guildID] = false
+	}()
 	if rouletteWheelSpinning[guildID] {
 		return "Wheel is already spinning, place a bet", nil
 	}
@@ -3386,11 +3408,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"kickme":         commandFunc(kickme),
 		"spamuser":       commandFunc(spamuser1),
 		"spamuser2":      commandFunc(spamuser2),
+		"spamuser3":      commandFunc(spamuser3),
 		"math":           commandFunc(maths),
 		"cputemp":        commandFunc(cputemp),
 		"ayy":            commandFunc(ayy),
 		"spamdiscord":    commandFunc(spamdiscord1),
 		"spamdiscord2":   commandFunc(spamdiscord2),
+		"spamdiscord3":   commandFunc(spamdiscord3),
 		"ping":           commandFunc(ping),
 		"xd":             commandFunc(xd),
 		"asuh":           commandFunc(asuh),

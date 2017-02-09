@@ -16,8 +16,9 @@ const (
 )
 
 var (
-	rand      = mrand.New(mrand.NewSource(time.Now().UnixNano()))
-	startPair = [2]string{zero, start}
+	rand        = mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	startPair   = [2]string{zero, start}
+	startTriple = [3]string{zero, start, start}
 )
 
 func prune(words []string) []string {
@@ -116,6 +117,56 @@ func GenSecondOrder(corpus []string) string {
 			break
 		}
 		words = append(words, pair[1])
+	}
+	return strings.Join(words, " ")
+}
+
+//GenThirdOrder returns a random sentence generated from first-order markov chains made from the input corpus
+func GenThirdOrder(corpus []string) string {
+	graph := make(map[[3]string][][3]string)
+	graph[startTriple] = make([][3]string, 0)
+
+	for _, line := range corpus {
+		words := prune(strings.Fields(line))
+
+		for i, word := range words {
+			prevWords := []string{start, start}
+			nextWord := end
+			if i > 0 {
+				prevWords[1] = words[i-1]
+				if i > 1 {
+					prevWords[0] = words[i-2]
+				}
+			}
+			if i < len(words)-1 {
+				nextWord = words[i+1]
+			}
+			prevTriple := [3]string{prevWords[0], prevWords[1], word}
+			nextTriple := [3]string{prevWords[1], word, nextWord}
+
+			if _, found := graph[prevTriple]; !found {
+				graph[prevTriple] = make([][3]string, 0)
+			}
+
+			if i == 0 {
+				graph[startTriple] = append(graph[startTriple], prevTriple)
+			}
+			graph[prevTriple] = append(graph[prevTriple], nextTriple)
+		}
+	}
+
+	var words []string
+	triple := startTriple
+	for {
+		max := len(graph[triple])
+		if max < 1 {
+			break
+		}
+		triple = graph[triple][rand.Intn(max)]
+		if triple[2] == end {
+			break
+		}
+		words = append(words, triple[2])
 	}
 	return strings.Join(words, " ")
 }
