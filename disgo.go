@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	crand "crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -2076,31 +2077,11 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if rouletteWheelSpinning[guildID] {
 		return "Wheel is already spinning, place a bet", nil
 	}
-	res, err := http.Post("https://api.random.org/json-rpc/1/invoke", "application/json", strings.NewReader(`{"jsonrpc": "2.0","method": "generateIntegers","params": {"apiKey": "9f397d6a-c4bd-49b6-9f9c-621183b2d2e1","n": 1,"min": 0,"max": 36},"id": `+messageID+`}`))
+	bigValue, err := crand.Int(crand.Reader, big.NewInt(36))
 	if err != nil {
-		return "", err
+		return "", nil
 	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	var result struct {
-		Result struct {
-			Random struct {
-				Data []int `json:"data"`
-			} `json:"random"`
-		} `json:"result"`
-		ID int `json:"id"`
-	}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return "", err
-	}
-	if strconv.Itoa(result.ID) != messageID {
-		return "", errors.New("ID mismatch")
-	}
-	value := rouletteWheelValues[result.Result.Random.Data[0]]
+	value := rouletteWheelValues[bigValue.Int64()]
 	colorStr := "Black"
 	if value != 0 && rouletteIsRed[value-1] {
 		colorStr = "Red"
