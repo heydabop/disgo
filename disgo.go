@@ -1031,7 +1031,7 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		lastQuoteIDs[chanID] = quoteID
 		userIDUpQuotes[chanID] = make([]string, 0)
 	}
-	return fmt.Sprintf("%s\n%s", username, outStr), nil
+	return fmt.Sprintf("%s: %s", username, outStr), nil
 }
 
 func spamuser1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1051,7 +1051,7 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND content != ''`, realChanID)
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND content != '' AND author_id != $2`, realChanID, ownUserID)
 	if err != nil {
 		return "", err
 	}
