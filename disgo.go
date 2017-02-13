@@ -3357,7 +3357,7 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 }
 
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
-	commandRegexes := []*regexp.Regexp{regexp.MustCompile(`^<@!` + ownUserID + `>\s+(.+)`), regexp.MustCompile(`^\/(.+)`)}
+	commandRegex := regexp.MustCompile(`^\/(.+)`)
 	upvoteRegex := regexp.MustCompile(`(<@!?\d+?>)\s*\+\+`)
 	downvoteRegex := regexp.MustCompile(`(<@!?\d+?>)\s*--`)
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
@@ -3592,11 +3592,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 		}
 
-		for _, regex := range commandRegexes {
-			if match := regex.FindStringSubmatch(m.Content); match != nil {
-				if executeCommand(s, channel.GuildID, m, strings.Fields(match[1])) {
-					return
-				}
+		if match := commandRegex.FindStringSubmatch(m.Content); match != nil {
+			if executeCommand(s, channel.GuildID, m, strings.Fields(match[1])) {
+				return
 			}
 		}
 		if match := questionRegex.FindString(m.Content); match != "" {
