@@ -1259,7 +1259,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := rand.Intn(57)
+		suh := rand.Intn(60)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh))
 		break
 	}
@@ -3074,7 +3074,7 @@ func jpg(session *discordgo.Session, guildID, chanID, authorID, messageID string
 			}
 		}
 		if len(URL) < 1 {
-			urlRegex := regexp.MustCompile(`(?i)^https?:\/\/.+\.(?:jpg|png|jpeg|gif)$`)
+			urlRegex := regexp.MustCompile(`(?i)https?:\/\/.+\.(?:jpg|png|jpeg|gif)`)
 			if urlRegex.MatchString(message.Content) {
 				URL = message.Content
 			}
