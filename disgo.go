@@ -1483,7 +1483,7 @@ func remindme(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	arg := strings.Join(args, " ")
 	fmt.Println(arg)
 	atTimeRegex := regexp.MustCompile(`(?i)(?:at\s+)?(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[\+-]\d{4})\s+(?:to\s+)?(.*)`)
-	inTimeRegex := regexp.MustCompile(`(?i)(?:in)?\s*(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))\s?)+(?:to)?\s+(.*)`)
+	inTimeRegex := regexp.MustCompile(`(?i)(?:in)?\s*(?:(?:(?:(\d+)\s+years?)|(?:(\d+)\s+months?)|(?:(\d+)\s+weeks?)|(?:(\d+)\s+days?)|(?:(\d+)\s+hours?)|(?:(\d+)\s+minutes?)|(?:(\d+)\s+seconds?))(?:\sand)?\s?)+(?:to)?\s+(.*)`)
 	atMatch := atTimeRegex.FindStringSubmatch(arg)
 	inMatch := inTimeRegex.FindStringSubmatch(arg)
 	fmt.Printf("%#v\n", atMatch)
