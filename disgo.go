@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	crand "crypto/rand"
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
@@ -2108,11 +2107,7 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if rouletteWheelSpinning[guildID] {
 		return "Wheel is already spinning, place a bet", nil
 	}
-	bigValue, err := crand.Int(crand.Reader, big.NewInt(36))
-	if err != nil {
-		return "", nil
-	}
-	value := rouletteWheelValues[bigValue.Int64()]
+	value := rouletteWheelValues[rand.Intn(36)]
 	colorStr := "Black"
 	if value != 0 && rouletteIsRed[value-1] {
 		colorStr = "Red"
