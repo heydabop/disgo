@@ -3623,8 +3623,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		}
 		if match := botRegex.FindString(m.Content); match != "" {
 			if rand.Intn(4) == 0 {
-				s.MessageReactionAdd(m.ChannelID, m.ID, "🤖")
-				s.MessageReactionAdd(m.ChannelID, m.ID, "👋")
+				go func() {
+					s.MessageReactionAdd(m.ChannelID, m.ID, "🤖")
+					s.MessageReactionAdd(m.ChannelID, m.ID, "👋")
+				}()
 			}
 		}
 
