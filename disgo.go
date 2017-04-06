@@ -3391,6 +3391,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
 	//oddshotRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?oddshot.tv\/shot\/[\w-]+`)
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
+	botRegex := regexp.MustCompile(`(?i)(^|\s)(bot|robot)($|\s)`)
 	questionRegex := regexp.MustCompile(`^<@!` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
@@ -3618,6 +3619,12 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				if err != nil {
 					fmt.Println("Error sending response " + err.Error())
 				}
+			}
+		}
+		if match := botRegex.FindString(m.Content); match != "" {
+			if rand.Intn(4) == 0 {
+				s.MessageReactionAdd(m.ChannelID, m.ID, "🤖")
+				s.MessageReactionAdd(m.ChannelID, m.ID, "👋")
 			}
 		}
 
