@@ -39,6 +39,7 @@ import (
 	"github.com/heydabop/disgo/markov"
 	mcrcon "github.com/james4k/rcon"
 	_ "github.com/lib/pq"
+	"github.com/nfnt/resize"
 	"github.com/satori/go.uuid"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -3122,6 +3123,7 @@ func jpg(session *discordgo.Session, guildID, chanID, authorID, messageID string
 		if err != nil {
 			return "", err
 		}
+		linkedImage = resize.Thumbnail(400, 400, linkedImage, resize.Bilinear)
 		jpgImage := new(bytes.Buffer)
 		options := jpeg.Options{Quality: 0}
 		if err = jpeg.Encode(jpgImage, linkedImage, &options); err != nil {
