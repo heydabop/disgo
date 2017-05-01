@@ -86,33 +86,33 @@ const (
 )
 
 var (
-	currentGame                       string
-	currentVoiceSessions              = make(map[string]*discordgo.VoiceConnection)
-	currentVoiceTimers                = make(map[string]*time.Timer)
-	gamelist                          []string
-	lastKappa                         = make(map[string]time.Time)
-	lastMessages, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
-	lastQuoteIDs                      = make(map[string]int64)
-	ignoredUserIDs                    = make(map[[2]string]time.Time)
-	mutedUserIDs                      = make(map[[2]string]time.Time)
-	ownUserID                         string
-	ownUserIDint                      uint64
-	rand                              = mrand.New(mrand.NewSource(time.Now().UnixNano()))
-	rouletteIsRed                     = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
-	rouletteBets                      = make(map[string][]userBet)
-	rouletteTableValues               = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
-	rouletteWheelSpinningPending      = make(map[string]bool)
-	rouletteWheelSpinning             = make(map[string]bool)
-	rouletteWheelValues               = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
-	startTime                         = time.Now()
-	sqlClient                         *sql.DB
-	timeoutedUserIDs                  = make(map[string]time.Time)
-	typingTimer                       = make(map[string]*time.Timer)
-	userIDRegex                       = regexp.MustCompile(`<@!?(\d+?)>`)
-	userIDUpQuotes                    = make(map[string][]string)
-	voiceMutex                        sync.Mutex
-	voteTime                          = make(map[string]time.Time)
-	wasNicknamed                      = make(map[string]bool)
+	currentGame                                                      string
+	currentVoiceSessions                                             = make(map[string]*discordgo.VoiceConnection)
+	currentVoiceTimers                                               = make(map[string]*time.Timer)
+	gamelist                                                         []string
+	lastKappa                                                        = make(map[string]time.Time)
+	lastMessagesByAuthor, lastMessagesByChannel, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message), make(map[string]discordgo.Message)
+	lastQuoteIDs                                                     = make(map[string]int64)
+	ignoredUserIDs                                                   = make(map[[2]string]time.Time)
+	mutedUserIDs                                                     = make(map[[2]string]time.Time)
+	ownUserID                                                        string
+	ownUserIDint                                                     uint64
+	rand                                                             = mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	rouletteIsRed                                                    = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
+	rouletteBets                                                     = make(map[string][]userBet)
+	rouletteTableValues                                              = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
+	rouletteWheelSpinningPending                                     = make(map[string]bool)
+	rouletteWheelSpinning                                            = make(map[string]bool)
+	rouletteWheelValues                                              = []int{32, 15, 19, 4, 12, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26, 0}
+	startTime                                                        = time.Now()
+	sqlClient                                                        *sql.DB
+	timeoutedUserIDs                                                 = make(map[string]time.Time)
+	typingTimer                                                      = make(map[string]*time.Timer)
+	userIDRegex                                                      = regexp.MustCompile(`<@!?(\d+?)>`)
+	userIDUpQuotes                                                   = make(map[string][]string)
+	voiceMutex                                                       sync.Mutex
+	voteTime                                                         = make(map[string]time.Time)
+	wasNicknamed                                                     = make(map[string]bool)
 )
 
 func timeSinceStr(timeSince time.Duration) string {
@@ -915,7 +915,7 @@ func lastseen(session *discordgo.Session, guildID, chanID, authorID, messageID s
 }
 
 func deleteLastMessage(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	lastMessage, msgFound := lastMessages[authorID]
+	lastMessage, msgFound := lastMessagesByAuthor[authorID]
 	lastCommandMessage, cmdFound := lastCommandMessages[authorID]
 	if msgFound && cmdFound {
 		session.ChannelMessageDelete(lastMessage.ChannelID, lastMessage.ID)
@@ -3502,7 +3502,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
 				} else {
 					lastCommandMessages[m.Author.ID] = *m.Message
-					lastMessages[m.Author.ID] = *message
+					lastMessagesByAuthor[m.Author.ID] = *message
 				}
 				fmt.Println("ERROR in " + command[0])
 				fmt.Printf("ARGS: %v\n", command[1:])
@@ -3524,7 +3524,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 					}
 				}
 				lastCommandMessages[m.Author.ID] = *m.Message
-				lastMessages[m.Author.ID] = *message
+				lastMessagesByAuthor[m.Author.ID] = *message
 			}
 			return true
 		}
@@ -3572,10 +3572,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			s.ChannelMessageDelete(m.ChannelID, m.ID)
 			return
 		}
-
 		if m.Author.ID == ownUserID {
 			return
 		}
+
+		if lastChanMessage, found := lastMessagesByChannel[m.ChannelID]; found && lastChanMessage.Content == m.Content {
+			s.ChannelMessageDelete(m.ChannelID, m.ID)
+		}
+		lastMessagesByChannel[m.ChannelID] = *(m.Message)
 
 		if ignoredUntil, found := ignoredUserIDs[[2]string{channel.GuildID, m.Author.ID}]; found && ignoredUntil.After(time.Now()) {
 			return
