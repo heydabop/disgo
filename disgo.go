@@ -1586,7 +1586,7 @@ func bitrate(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	var chanRates stringFloatPairs
 	longestChanLength := 0
 	for _, guildChan := range guildChans {
-		if guildChan != nil && guildChan.Type == "voice" {
+		if guildChan != nil && guildChan.Type == discordgo.ChannelTypeGuildVoice {
 			chanRates = append(chanRates, stringFloatPair{guildChan.Name, float64(guildChan.Bitrate) / 1000})
 			if len(guildChan.Name) > longestChanLength {
 				longestChanLength = len(guildChan.Name)
@@ -3073,7 +3073,7 @@ func totalMessages(session *discordgo.Session, guildID, chanID, authorID, messag
 }
 
 func totalServers(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	userGuilds, err := session.UserGuilds()
+	userGuilds, err := session.UserGuilds(100, "", "")
 	if err != nil {
 		return "", err
 	}
@@ -3085,7 +3085,7 @@ func source(session *discordgo.Session, guildID, chanID, authorID, messageID str
 }
 
 func jpg(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	messages, err := session.ChannelMessages(chanID, 10, messageID, "")
+	messages, err := session.ChannelMessages(chanID, 50, messageID, "", "")
 	if err != nil {
 		return "", nil
 	}
@@ -3755,7 +3755,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			executeCommand(s, m, []string{"oddshot", match})
 			return
 		}*/
-		if channel.IsPrivate {
+		if channel.Type == discordgo.ChannelTypeDM {
 			executeCommand(s, channel.GuildID, m, strings.Fields(m.Content))
 			return
 		}
@@ -3816,7 +3816,7 @@ func updateGame(s *discordgo.Session) {
 			currentGame = gamelist[index]
 		}
 	}
-	userGuilds, err := s.UserGuilds()
+	userGuilds, err := s.UserGuilds(100, "", "")
 	if err != nil {
 		fmt.Println("Error getting user guilds", err.Error())
 	}
@@ -4245,7 +4245,7 @@ func main() {
 		}
 	}()
 
-	userGuilds, err := client.UserGuilds()
+	userGuilds, err := client.UserGuilds(100, "", "")
 	if err != nil {
 		fmt.Println("Error getting user guilds", err.Error())
 	}
