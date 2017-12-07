@@ -1508,40 +1508,54 @@ func remindme(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		var years, months, weeks, days int
 		var hours, minutes, seconds int64
 		var err error
-		years, err = strconv.Atoi(inMatch[1])
-		if err != nil {
-			days = 0
+		if len(inMatch[1]) > 0 {
+			years, err = strconv.Atoi(inMatch[1])
+			if err != nil {
+				return "", err
+			}
 		}
-		months, err = strconv.Atoi(inMatch[2])
-		if err != nil {
-			days = 0
+		if len(inMatch[2]) > 0 {
+			months, err = strconv.Atoi(inMatch[2])
+			if err != nil {
+				return "", err
+			}
 		}
-		weeks, err = strconv.Atoi(inMatch[3])
-		if err != nil {
-			days = 0
+		if len(inMatch[3]) > 0 {
+			weeks, err = strconv.Atoi(inMatch[3])
+			if err != nil {
+				return "", err
+			}
 		}
-		days, err = strconv.Atoi(inMatch[4])
-		if err != nil {
-			days = 0
+		if len(inMatch[4]) > 0 {
+			days, err = strconv.Atoi(inMatch[4])
+			if err != nil {
+				return "", err
+			}
 		}
-		hours, err = strconv.ParseInt(inMatch[5], 10, 64)
-		if err != nil {
-			hours = 0
+		if len(inMatch[5]) > 0 {
+			hours, err = strconv.ParseInt(inMatch[5], 10, 64)
+			if err != nil {
+				return "", err
+			}
 		}
-		minutes, err = strconv.ParseInt(inMatch[6], 10, 64)
-		if err != nil {
-			minutes = 0
+		if len(inMatch[6]) > 0 {
+			minutes, err = strconv.ParseInt(inMatch[6], 10, 64)
+			if err != nil {
+				return "", err
+			}
 		}
-		seconds, err = strconv.ParseInt(inMatch[7], 10, 64)
-		if err != nil {
-			seconds = 0
+		if len(inMatch[7]) > 0 {
+			seconds, err = strconv.ParseInt(inMatch[7], 10, 64)
+			if err != nil {
+				return "", err
+			}
 		}
 		fmt.Printf("%dy %dm %dw %dd %dh %dm %ds\n", years, months, weeks, days, hours, minutes, seconds)
 		remindTime = now.AddDate(years, months, weeks*7+days).Add(time.Duration(hours)*time.Hour + time.Duration(minutes)*time.Minute + time.Duration(seconds)*time.Second)
 	}
 	fmt.Println(remindTime.Format(time.RFC3339))
 	if remindTime.Before(now) {
-		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street you idiot."}
+		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street."}
 		return responses[rand.Intn(len(responses))], nil
 	}
 	if _, err := sqlClient.Exec(`INSERT INTO reminder (chan_id, author_id, send_time, content) VALUES ($1, $2, $3, $4)`, chanID, authorID, remindTime.In(time.FixedZone("UTC", 0)), content); err != nil {
@@ -3636,7 +3650,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				if sqlErr := sqlClient.QueryRow(`INSERT INTO error(command, args, error) VALUES ($1, $2, $3) RETURNING id`, command[0], strings.Join(command[1:], " "), err.Error()).Scan(&errorID); sqlErr != nil {
 					fmt.Println("ERROR recording error " + sqlErr.Error())
 				}
-				message, msgErr := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠ `%s`\nReport Error: %s/disgo_error?id=%s", err.Error(), httpRoot, errorID.String()))
+				message, msgErr := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠ `%s`", err.Error()))
 				if msgErr != nil {
 					fmt.Println("ERROR SENDING ERROR MSG " + err.Error())
 				} else {
