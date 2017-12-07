@@ -3415,14 +3415,14 @@ func topEmoji(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		}
 	}
 	type emojiCount struct {
-		ID string
+		ID    string
 		Count uint
 	}
 	sortableCounts := make([]emojiCount, 0, 50)
 	for key, value := range counts {
 		sortableCounts = append(sortableCounts, emojiCount{key, value})
 	}
-	sort.Slice(sortableCounts, func(i, j int) bool {return sortableCounts[i].Count > sortableCounts[j].Count})
+	sort.Slice(sortableCounts, func(i, j int) bool { return sortableCounts[i].Count > sortableCounts[j].Count })
 
 	finalString := ""
 	for i, count := range sortableCounts {
@@ -3633,7 +3633,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"unmute":         commandFunc(unmute),
 		"dolphin":        commandFunc(dolphin),
 		"fortune":        commandFunc(fortune),
-		"topemoji":        commandFunc(topEmoji),
+		"topemoji":       commandFunc(topEmoji),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
