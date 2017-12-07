@@ -3,5 +3,5 @@ disgo
 *.db
 *.bak*
 *.mp3
-avatar.png
-avatar.jpg
+avatar*.png
+kappa*.png
