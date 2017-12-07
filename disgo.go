@@ -3354,6 +3354,72 @@ func fortune(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	return string(out), nil
 }
 
+func topEmoji(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	emojiRegex := regexp.MustCompile(`<:(.+?):(\d+)>`)
+	var limit int
+	if len(args) < 1 {
+		limit = 10
+	} else {
+		var err error
+		limit, err = strconv.Atoi(args[0])
+		if err != nil || limit < 0 {
+			return "", err
+		}
+	}
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+
+	guild, err := session.State.Guild(guildID)
+	if err != nil {
+		return "", err
+	}
+	emojis := make(map[string]string, 50)
+	for _, emoji := range guild.Emojis {
+		emojis[emoji.ID] = emoji.Name
+	}
+
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1`, chanIDint)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	counts := make(map[string]uint, 50)
+	for rows.Next() {
+		var message string
+		err := rows.Scan(&message)
+		if err != nil {
+			return "", err
+		}
+		if matches := emojiRegex.FindAllStringSubmatch(message, -1); matches != nil {
+			for _, match := range matches {
+				if emojis[match[2]] == match[1] {
+					counts[match[2]] = counts[match[2]] + 1
+				}
+			}
+		}
+	}
+	type emojiCount struct {
+		ID string
+		Count uint
+	}
+	sortableCounts := make([]emojiCount, 0, 50)
+	for key, value := range counts {
+		sortableCounts = append(sortableCounts, emojiCount{key, value})
+	}
+	sort.Slice(sortableCounts, func(i, j int) bool {return sortableCounts[i].Count > sortableCounts[j].Count})
+
+	finalString := ""
+	for i, count := range sortableCounts {
+		if i > limit {
+			break
+		}
+		finalString += fmt.Sprintf("<:%s:%s> — %d\n", emojis[count.ID], count.ID, count.Count)
+	}
+	return finalString, nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3413,6 +3479,7 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 **source** - link to bot source code on github
 **top** [number (optional)] - displays top <number> users sorted by messages sent
 **topCommand** [command] - displays who has issued <command> most
+**topEmoji** [number (optional)] - dispalys top <number> emojis sorted by times used
 **topLength** [number (optional)] - dispalys top <number> users sorted by average words/message
 **topOnline** - shows the maximum number of people that were ever simultaneously online
 **topQuote** [number (optional)] - dispalys top <number> of "quotes" from bot spam, sorted by votes from /upquote
@@ -3552,6 +3619,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"unmute":         commandFunc(unmute),
 		"dolphin":        commandFunc(dolphin),
 		"fortune":        commandFunc(fortune),
+		"topemoji":        commandFunc(topEmoji),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
