@@ -1265,7 +1265,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		suh := rand.Intn(62)
+		suh := rand.Intn(63)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh))
 		break
 	}
@@ -1641,7 +1641,7 @@ func age(session *discordgo.Session, guildID, chanID, authorID, messageID string
 		return "", err
 	}
 	timeSince := timeSinceStr(time.Now().Sub(timeJoined))
-	return fmt.Sprintf("%s joined this server %s ago", member.User.Username, timeSince), nil
+	return fmt.Sprintf("%s joined this server %s ago on %s", member.User.Username, timeSince, timeJoined.Format("Jan _2, 2006")), nil
 }
 
 func userage(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -2920,7 +2920,7 @@ func serverAge(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	}
 	creationTime := time.Unix(int64((intGuildID>>22)+discordEpoch)/1000, 0)
 
-	return fmt.Sprintf("This server was created %s ago", timeSinceStr(time.Since(creationTime))), nil
+	return fmt.Sprintf("This server was created %s ago on %s", timeSinceStr(time.Since(creationTime)), creationTime.Format("Jan 02, 2006")), nil
 }
 
 func track(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3394,7 +3394,7 @@ func topEmoji(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		emojis[emoji.ID] = emoji.Name
 	}
 
-	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1`, chanIDint)
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id <> $2`, chanIDint, ownUserIDint)
 	if err != nil {
 		return "", err
 	}
@@ -3547,7 +3547,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	questionRegex := regexp.MustCompile(`^<@!` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
-	greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*(.+)$`)
+	greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*([^:].+)$`)
 	funcMap := map[string]commandFunc{
 		"spam":           commandFunc(spam),
 		"soda":           commandFunc(soda),
