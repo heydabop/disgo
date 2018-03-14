@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,7 +89,6 @@ const (
 var (
 	currentGame                               string
 	currentVoiceSessions                      = make(map[string]*discordgo.VoiceConnection)
-	currentVoiceTimers                        = make(map[string]*time.Timer)
 	gamelist                                  []string
 	lastKappa                                 = make(map[string]time.Time)
 	lastMessagesByAuthor, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
@@ -1240,23 +1240,6 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		currentVoiceSessions[guildID] = nil
 		return "", err
 	}
-	if currentVoiceTimers[guildID] != nil {
-		currentVoiceTimers[guildID].Stop()
-	}
-	currentVoiceTimers[guildID] = time.AfterFunc(30*time.Second, func() {
-		if currentVoiceSessions[guildID] != nil {
-			if rand.Intn(3) == 0 {
-				dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3")
-				time.Sleep(1 * time.Second)
-			}
-			dgvoice.KillPlayer()
-			err := currentVoiceSessions[guildID].Disconnect()
-			currentVoiceSessions[guildID] = nil
-			if err != nil {
-				fmt.Println("ERROR disconnecting from voice channel " + err.Error())
-			}
-		}
-	})
 
 	time.Sleep(1 * time.Second)
 	session.ChannelMessageDelete(chanID, messageID)
@@ -1268,6 +1251,19 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		suh := rand.Intn(63)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh))
 		break
+	}
+
+	time.Sleep(5 * time.Second)
+
+	if rand.Intn(3) == 0 {
+		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3")
+		time.Sleep(1 * time.Second)
+	}
+	dgvoice.KillPlayer()
+	err = currentVoiceSessions[guildID].Disconnect()
+	currentVoiceSessions[guildID] = nil
+	if err != nil {
+		fmt.Println("ERROR disconnecting from voice channel " + err.Error())
 	}
 	return "", nil
 }
@@ -3434,6 +3430,11 @@ func topEmoji(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	return finalString, nil
 }
 
+func army(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	days := math.Ceil(time.Date(2018, 6, 21, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	return fmt.Sprintf("%.0f days until June 21, 2018", days), nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3634,6 +3635,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"dolphin":        commandFunc(dolphin),
 		"fortune":        commandFunc(fortune),
 		"topemoji":       commandFunc(topEmoji),
+		"army":           commandFunc(army),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
@@ -3687,6 +3689,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	return func(s *discordgo.Session, m *discordgo.MessageCreate) {
 		defer func() {
 			if r := recover(); r != nil {
+				fmt.Println(string(debug.Stack()))
 				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠ `panic: %+v`⚠", r))
 			}
 		}()
