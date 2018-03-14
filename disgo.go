@@ -35,7 +35,6 @@ import (
 	"github.com/Craftserve/mcstatus"
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
-	"github.com/chuckpreslar/rcon"
 	"github.com/gyuho/goling/similar"
 	"github.com/heydabop/disgo/markov"
 	mcrcon "github.com/james4k/rcon"
@@ -89,6 +88,7 @@ const (
 var (
 	currentGame                               string
 	currentVoiceSessions                      = make(map[string]*discordgo.VoiceConnection)
+	currentVoiceChans                         = make(map[string]chan bool)
 	gamelist                                  []string
 	lastKappa                                 = make(map[string]time.Time)
 	lastMessagesByAuthor, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
@@ -115,6 +115,12 @@ var (
 	voteTime                                  = make(map[string]time.Time)
 	wasNicknamed                              = make(map[string]bool)
 )
+
+func stopPlayer(guildID string) {
+	if stop, found := currentVoiceChans[guildID]; found {
+		stop <- true
+	}
+}
 
 func timeSinceStr(timeSince time.Duration) string {
 	str := ""
@@ -1226,7 +1232,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		if currentVoiceSessions[guildID].ChannelID == voiceChanID && currentVoiceSessions[guildID].GuildID == guild.ID {
 			return "", nil
 		}
-		dgvoice.KillPlayer()
+		stopPlayer(guildID)
 		err = currentVoiceSessions[guildID].Disconnect()
 		currentVoiceSessions[guildID] = nil
 		if err != nil {
@@ -1246,20 +1252,29 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	for i := 0; i < 10; i++ {
 		if currentVoiceSessions[guildID].Ready == false || currentVoiceSessions[guildID].OpusSend == nil {
 			time.Sleep(1 * time.Second)
+			if i == 9 {
+				err := currentVoiceSessions[guildID].Disconnect()
+				currentVoiceSessions[guildID] = nil
+				if err != nil {
+					fmt.Println("ERROR disconnecting from voice channel " + err.Error())
+				}
+				return "", nil
+			}
 			continue
 		}
 		suh := rand.Intn(63)
-		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh))
+		currentVoiceChans[guildID] = make(chan bool)
+		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
 	}
 
 	time.Sleep(5 * time.Second)
 
 	if rand.Intn(3) == 0 {
-		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3")
+		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3", currentVoiceChans[guildID])
 		time.Sleep(1 * time.Second)
 	}
-	dgvoice.KillPlayer()
+	stopPlayer(guildID)
 	err = currentVoiceSessions[guildID].Disconnect()
 	currentVoiceSessions[guildID] = nil
 	if err != nil {
@@ -2687,34 +2702,6 @@ func whois(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	return username, nil
 }
 
-func starbound(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	client, err := rcon.NewClient("127.0.0.1", sbrconPort)
-	if err != nil {
-		return "", err
-	}
-	packet, err := client.Authorize(sbrconPass)
-	if err != nil {
-		return "", err
-	}
-	packet, err = client.Execute("list")
-	if err != nil {
-		return "", err
-	}
-	var usernames []string
-	for _, line := range strings.Split(packet.Body, "\n") {
-		start := strings.Index(line, " : ")
-		end := strings.LastIndex(line, " : $$")
-		if start != -1 && end != -1 {
-			usernames = append(usernames, line[start+3:end])
-		}
-	}
-	onlineStr := "[0 Online]"
-	if len(usernames) > 0 {
-		onlineStr = fmt.Sprintf("[%d Online] — %s", len(usernames), strings.Join(usernames, ", "))
-	}
-	return fmt.Sprintf("%s:%d\n%s", starboundServer, starboundPort, onlineStr), nil
-}
-
 func permission(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	perm, err := session.State.UserChannelPermissions(ownUserID, chanID)
 	if err != nil {
@@ -3612,7 +3599,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"updateavatar":   commandFunc(updateAvatar),
 		"lastplayed":     commandFunc(lastPlayed),
 		"whois":          commandFunc(whois),
-		"starbound":      commandFunc(starbound),
 		"permission":     commandFunc(permission),
 		"voicekick":      commandFunc(voicekick),
 		"toponline":      commandFunc(topOnline),
@@ -4237,6 +4223,25 @@ func checkShipments(s *discordgo.Session) {
 	}
 }
 
+func alexaAsuh(session *discordgo.Session) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+			return
+		}
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			return
+		}
+		if string(body) != `{=!67jn6@MOYof=@9(U6b#X1Y]~_e8y{AaZ'!:'1PT)#Ou(H1/]Ct!193@&q}e!'*Xu0u._BzFRX1s7^p;>wax|e3mIYCPF$Xd7St'4-&c5U(;0n@5up$.S+7'z'rs` {
+			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			return
+		}
+		go asuh(session, "98470233999675392", "98470233999675392", "98482369446543360", "-1", []string{})
+	}
+}
+
 func reportError(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query()["id"]
 	if len(id) != 1 {
@@ -4319,9 +4324,9 @@ func main() {
 	defer func() {
 		voiceMutex.Lock()
 		defer voiceMutex.Unlock()
-		for _, voiceSession := range currentVoiceSessions {
+		for guildID, voiceSession := range currentVoiceSessions {
 			if voiceSession != nil {
-				dgvoice.KillPlayer()
+				stopPlayer(guildID)
 				err := voiceSession.Disconnect()
 				if err != nil {
 					fmt.Println("ERROR leaving voice channel " + err.Error())
@@ -4388,9 +4393,9 @@ func main() {
 		case <-signals:
 			voiceMutex.Lock()
 			defer voiceMutex.Unlock()
-			for _, voiceSession := range currentVoiceSessions {
+			for guildID, voiceSession := range currentVoiceSessions {
 				if voiceSession != nil {
-					dgvoice.KillPlayer()
+					stopPlayer(guildID)
 					err := voiceSession.Disconnect()
 					if err != nil {
 						fmt.Println("ERROR leaving voice channel " + err.Error())
@@ -4444,6 +4449,7 @@ func main() {
 
 	time.AfterFunc(5*time.Minute, func() { checkShipments(client) })
 
+	http.HandleFunc("/alexa_asuh", alexaAsuh(client))
 	http.HandleFunc("/disgo_error", reportError)
 	go func() {
 		fmt.Println(http.ListenAndServe(":8083", nil))
