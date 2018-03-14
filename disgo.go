@@ -4234,7 +4234,7 @@ func alexaAsuh(session *discordgo.Session) func(w http.ResponseWriter, r *http.R
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		if string(body) != `{=!67jn6@MOYof=@9(U6b#X1Y]~_e8y{AaZ'!:'1PT)#Ou(H1/]Ct!193@&q}e!'*Xu0u._BzFRX1s7^p;>wax|e3mIYCPF$Xd7St'4-&c5U(;0n@5up$.S+7'z'rs` {
+		if string(body) != alexaBody {
 			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 			return
 		}
