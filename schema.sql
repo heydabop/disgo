@@ -2,8 +2,8 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 9.6.1
--- Dumped by pg_dump version 9.6.1
+-- Dumped from database version 9.6.5
+-- Dumped by pg_dump version 9.6.5
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -27,6 +27,7 @@ ALTER TABLE IF EXISTS ONLY public.user_karma DROP CONSTRAINT IF EXISTS user_karm
 ALTER TABLE IF EXISTS ONLY public.shipment DROP CONSTRAINT IF EXISTS shipment_pkey;
 ALTER TABLE IF EXISTS ONLY public.shipment DROP CONSTRAINT IF EXISTS shipment_carrier_tracking_number_author_id_key;
 ALTER TABLE IF EXISTS ONLY public.reminder DROP CONSTRAINT IF EXISTS reminder_pkey;
+ALTER TABLE IF EXISTS ONLY public.pee_log DROP CONSTRAINT IF EXISTS pee_log_create_date_user_id_key;
 ALTER TABLE IF EXISTS ONLY public.own_username DROP CONSTRAINT IF EXISTS own_username_pkey;
 ALTER TABLE IF EXISTS ONLY public.message DROP CONSTRAINT IF EXISTS message_pkey;
 ALTER TABLE IF EXISTS ONLY public.error DROP CONSTRAINT IF EXISTS error_pkey;
@@ -51,6 +52,7 @@ DROP SEQUENCE IF EXISTS public.shipment_id_seq;
 DROP TABLE IF EXISTS public.shipment;
 DROP SEQUENCE IF EXISTS public.reminder_id_seq;
 DROP TABLE IF EXISTS public.reminder;
+DROP TABLE IF EXISTS public.pee_log;
 DROP SEQUENCE IF EXISTS public.own_username_id_seq;
 DROP TABLE IF EXISTS public.own_username;
 DROP TABLE IF EXISTS public.message;
@@ -221,6 +223,16 @@ CREATE SEQUENCE own_username_id_seq
 --
 
 ALTER SEQUENCE own_username_id_seq OWNED BY own_username.id;
+
+
+--
+-- Name: pee_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE pee_log (
+    create_date timestamp with time zone DEFAULT now() NOT NULL,
+    user_id character varying(30)
+);
 
 
 --
@@ -501,6 +513,14 @@ ALTER TABLE ONLY message
 
 ALTER TABLE ONLY own_username
     ADD CONSTRAINT own_username_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pee_log pee_log_create_date_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY pee_log
+    ADD CONSTRAINT pee_log_create_date_user_id_key UNIQUE (create_date, user_id);
 
 
 --
