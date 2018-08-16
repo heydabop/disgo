@@ -3452,6 +3452,21 @@ func army(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%.0f days until June 21, 2018", days), nil
 }
 
+func grad(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	days := math.Ceil(time.Date(2018, 5, 11, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	return fmt.Sprintf("%.0f days until May 11, 2018", days), nil
+}
+
+func playing(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	if authorID != adminID || len(args) < 1 {
+		return "", nil
+	}
+	if err := session.UpdateStatus(0, strings.Join(args[0:], " ")); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func pee(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	lastPeeDate := time.Now().Add(-24 * time.Hour)
 	if err := sqlClient.QueryRow(`SELECT create_date FROM pee_log WHERE user_id = $1 ORDER BY create_date DESC LIMIT 1`, authorID).Scan(&lastPeeDate); err != nil && err != sql.ErrNoRows {
@@ -3736,6 +3751,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"fortune":        commandFunc(fortune),
 		"topemoji":       commandFunc(topEmoji),
 		"army":           commandFunc(army),
+		"grad":           commandFunc(grad),
+		"playing":        commandFunc(playing),
 		"pee":            commandFunc(pee),
 		"peecounter":     commandFunc(peeCounter),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
