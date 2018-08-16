@@ -1288,7 +1288,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			}
 			continue
 		}
-		suh := rand.Intn(63)
+		suh := rand.Intn(64)
 		currentVoiceChans[guildID] = make(chan bool)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
@@ -2634,6 +2634,10 @@ func invite(session *discordgo.Session, guildID, chanID, authorID, messageID str
 }
 
 func updateAvatar(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	if authorID != adminID {
+		return "", nil
+	}
+
 	avatar, err := os.Open("avatar.png")
 	if err != nil {
 		return "", err
@@ -4028,7 +4032,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 		return
 	}
 	gameName := ""
-	if p.Game != nil {
+	if p.Game != nil && p.Game.Name != "Spotify" {
 		gameName = p.Game.Name
 	}
 	/*user, err := s.User(p.User.ID)
