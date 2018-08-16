@@ -375,6 +375,32 @@ func getShippoTrack(carrier, trackingNum string) (*shippoTrack, error) {
 	return &status, nil
 }
 
+func getSunrise(date time.Time) (*time.Time, error) {
+	res, err := http.Get(fmt.Sprintf("https://api.sunrise-sunset.org/json?lat=%f&lng=%f&date=%s&formatted=0", botLat, botLng, date.Format("2006-01-02")))
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Results struct {
+			Sunrise time.Time `json:"sunrise"`
+		} `json:"results"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
+	}
+	if response.Status != "OK" {
+		return nil, fmt.Errorf("Non-OK Status: %s", response.Status)
+	}
+	return &response.Results.Sunrise, nil
+}
+
 func spam(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	filename := ""
 	if len(args) < 1 {
@@ -3422,6 +3448,90 @@ func army(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%.0f days until June 21, 2018", days), nil
 }
 
+func pee(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	lastPeeDate := time.Now().Add(-24 * time.Hour)
+	if err := sqlClient.QueryRow(`SELECT create_date FROM pee_log WHERE user_id = $1 ORDER BY create_date DESC LIMIT 1`, authorID).Scan(&lastPeeDate); err != nil && err != sql.ErrNoRows {
+		return "", err
+	}
+	if lastPeeDate.After(time.Now().Add(-30 * time.Minute)) {
+		return "You *just* went, that doesn't count.", nil
+	}
+	if _, err := sqlClient.Exec(`INSERT INTO pee_log(user_id) VALUES ($1)`, authorID); err != nil {
+		return "", err
+	}
+	return "I'm proud of you.", nil
+}
+
+func peeCounter(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	now := time.Now()
+	sunrise, err := getSunrise(now)
+	if err != nil {
+		return "", err
+	}
+	if sunrise.After(now) {
+		sunrise, err = getSunrise(time.Date(now.Year(), now.Month(), now.Day()-1, now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), now.Location()))
+		if err != nil {
+			return "", err
+		}
+	}
+
+	counters := make(map[string]int)
+	guild, err := session.State.Guild(guildID)
+	if err != nil {
+		return "", err
+	}
+	if guild.Members != nil {
+		for _, member := range guild.Members {
+			if user := member.User; user != nil {
+				counters[user.ID] = 0
+			}
+		}
+	}
+
+	rows, err := sqlClient.Query(`SELECT user_id FROM pee_log WHERE create_date >= $1`, sunrise)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return "", err
+		}
+		if _, found := counters[userID]; found {
+			counters[userID]++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+
+	longestUsernameLength := 0
+	totalCount := 0
+	usernameCounters := make(map[string]int)
+	for userID, count := range counters {
+		if count == 0 {
+			continue
+		}
+		username, err := getUsername(session, userID, guildID)
+		if err != nil {
+			return "", err
+		}
+		totalCount += count
+		usernameCounters[username] = count
+		if len(username) > longestUsernameLength {
+			longestUsernameLength = len(username)
+		}
+	}
+
+	message := fmt.Sprintf("Pee counts since sunrise at %s\n", sunrise.In(time.Local).Format(time.RFC1123Z))
+	message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s - %d\n", "Total", totalCount)
+	for username, count := range usernameCounters {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s — %d\n", username, count)
+	}
+	return fmt.Sprintf("```%s```", message), nil
+}
+
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -3622,13 +3732,15 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"fortune":        commandFunc(fortune),
 		"topemoji":       commandFunc(topEmoji),
 		"army":           commandFunc(army),
+		"pee":            commandFunc(pee),
+		"peecounter":     commandFunc(peeCounter),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
 	executeCommand := func(s *discordgo.Session, guildID string, m *discordgo.MessageCreate, command []string) bool {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute", "pee":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
