@@ -74,6 +74,7 @@ type userBet struct {
 type shippoTrack struct {
 	Carrier        string `json:"carrier"`
 	TrackingNumber string `json:"tracking_number"`
+	ETA            string `json:"eta"`
 	TrackingStatus struct {
 		Status        string    `json:"status"`
 		StatusDetails string    `json:"status_details"`
@@ -348,14 +349,13 @@ func getMarkovFilelist(name string) (files []string, err error) {
 func getShippoTrack(carrier, trackingNum string) (*shippoTrack, error) {
 	client := http.Client{}
 	req, err := http.NewRequest(
-		"POST",
-		"https://api.goshippo.com/v1/tracks/",
-		bytes.NewBufferString(url.Values{"carrier": {carrier}, "tracking_number": {trackingNum}, "metadata": {"Bot created"}}.Encode()))
+		"GET",
+		fmt.Sprintf("https://api.goshippo.com/tracks/%s/%s", strings.ToLower(carrier), trackingNum),
+		nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("Authorization", fmt.Sprintf("ShippoToken %s", shippoToken))
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -1288,7 +1288,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			}
 			continue
 		}
-		suh := rand.Intn(64)
+		suh := rand.Intn(65)
 		currentVoiceChans[guildID] = make(chan bool)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
@@ -2958,7 +2958,13 @@ func track(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	case "UNKNOWN":
 		message = fmt.Sprintf("Unable to find shipment with tracking number %s", trackingNum)
 	case "TRANSIT":
-		message = "Your shipment is in transit"
+		eta, err := time.Parse(time.RFC3339, status.ETA)
+		if err != nil {
+			fmt.Println("Error parsing shippo ETA", err)
+			message = "Your shipment is in transit"
+		} else {
+			message = fmt.Sprintf("Your shipment is in transit. ETA: %s", eta.Format("Monday, Jan 02"))
+		}
 	case "DELIVERED":
 		message = fmt.Sprintf("Your shipment was delivered at %s", status.TrackingStatus.StatusDate.Format(time.RFC1123Z))
 	case "RETURNED":
@@ -3478,22 +3484,21 @@ func pee(session *discordgo.Session, guildID, chanID, authorID, messageID string
 	if _, err := sqlClient.Exec(`INSERT INTO pee_log(user_id) VALUES ($1)`, authorID); err != nil {
 		return "", err
 	}
-	return "I'm proud of you.", nil
+	responses := []string{
+		"I'm proud of you.",
+		"Well done!",
+		"Keep it up.",
+		"Clear and copious!",
+		"What color was it?",
+		":+1:",
+		":ok_hand:",
+		"Congrats",
+		"Good job.",
+		"same"}
+	return responses[rand.Intn(len(responses))], nil
 }
 
 func peeCounter(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	now := time.Now()
-	sunrise, err := getSunrise(now)
-	if err != nil {
-		return "", err
-	}
-	if sunrise.After(now) {
-		sunrise, err = getSunrise(time.Date(now.Year(), now.Month(), now.Day()-1, now.Hour(), now.Minute(), now.Second(), now.Nanosecond(), now.Location()))
-		if err != nil {
-			return "", err
-		}
-	}
-
 	counters := make(map[string]int)
 	guild, err := session.State.Guild(guildID)
 	if err != nil {
@@ -3507,7 +3512,8 @@ func peeCounter(session *discordgo.Session, guildID, chanID, authorID, messageID
 		}
 	}
 
-	rows, err := sqlClient.Query(`SELECT user_id FROM pee_log WHERE create_date >= $1`, sunrise)
+	dayAgo := time.Now().Add(-24 * time.Hour)
+	rows, err := sqlClient.Query(`SELECT user_id FROM pee_log WHERE create_date >= $1`, dayAgo)
 	if err != nil {
 		return "", err
 	}
@@ -3525,9 +3531,14 @@ func peeCounter(session *discordgo.Session, guildID, chanID, authorID, messageID
 		return "", err
 	}
 
+	type usernameCount struct {
+		Username string
+		Count    int
+	}
+
 	longestUsernameLength := 0
 	totalCount := 0
-	usernameCounters := make(map[string]int)
+	var usernameCounters []usernameCount
 	for userID, count := range counters {
 		if count == 0 {
 			continue
@@ -3537,18 +3548,82 @@ func peeCounter(session *discordgo.Session, guildID, chanID, authorID, messageID
 			return "", err
 		}
 		totalCount += count
-		usernameCounters[username] = count
+		usernameCounters = append(usernameCounters, usernameCount{username, count})
 		if len(username) > longestUsernameLength {
 			longestUsernameLength = len(username)
 		}
 	}
 
-	message := fmt.Sprintf("Pee counts since sunrise at %s\n", sunrise.In(time.Local).Format(time.RFC1123Z))
-	message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s - %d\n", "Total", totalCount)
-	for username, count := range usernameCounters {
-		message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s — %d\n", username, count)
+	sort.Slice(usernameCounters, func(i, j int) bool { return usernameCounters[i].Count > usernameCounters[j].Count })
+
+	message := fmt.Sprintf("Pee counts in the last 24 hours\n")
+	message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s - %d\n\n", "Total", totalCount)
+	for _, uc := range usernameCounters {
+		message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s — %d\n", uc.Username, uc.Count)
 	}
 	return fmt.Sprintf("```%s```", message), nil
+}
+
+func poop(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	responses := []string{
+		"tmi",
+		"No thanks.",
+		"That's disgusting.",
+		"What is wrong with you?",
+		"Stop it.",
+		"No one wants to know that.",
+		"🤮"}
+	return responses[rand.Intn(len(responses))], nil
+}
+
+func sebbiTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc, err := time.LoadLocation("Europe/Copenhagen")
+	if err != nil {
+		return "", err
+	}
+	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
+}
+
+func nielTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc, err := time.LoadLocation("Europe/Helsinki")
+	if err != nil {
+		return "", err
+	}
+	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
+}
+
+func realTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		return "", err
+	}
+	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
+}
+
+func euTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc1, err := time.LoadLocation("Europe/Lisbon")
+	if err != nil {
+		return "", err
+	}
+	loc2, err := time.LoadLocation("Asia/Nicosia")
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	return fmt.Sprintf("%s - %s", now.In(loc1).Format("3:04 PM"), now.In(loc2).Format("3:04 PM")), nil
+}
+
+func usTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc1, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		return "", err
+	}
+	loc2, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	return fmt.Sprintf("%s - %s", now.In(loc1).Format("3:04 PM"), now.In(loc2).Format("3:04 PM")), nil
 }
 
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3755,6 +3830,16 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"playing":        commandFunc(playing),
 		"pee":            commandFunc(pee),
 		"peecounter":     commandFunc(peeCounter),
+		"poop":           commandFunc(poop),
+		"poo":            commandFunc(poop),
+		"sebbitime":      commandFunc(sebbiTime),
+		"nieltime":       commandFunc(nielTime),
+		"realtime":       commandFunc(realTime),
+		"goodtime":       commandFunc(realTime),
+		"actualtime":     commandFunc(realTime),
+		"eutime":         commandFunc(euTime),
+		"ustime":         commandFunc(usTime),
+		"natime":         commandFunc(usTime),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
