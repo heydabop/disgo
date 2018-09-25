@@ -36,6 +36,7 @@ import (
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
+	"github.com/heydabop/disgo/hangman"
 	"github.com/heydabop/disgo/markov"
 	mcrcon "github.com/james4k/rcon"
 	_ "github.com/lib/pq"
@@ -95,6 +96,7 @@ var (
 	lastMessagesByAuthor, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
 	lastMessagesByChannel                     = make(map[string][4]string)
 	lastQuoteIDs                              = make(map[string]int64)
+	hangmanGames                              = make(map[string]*hangman.Game)
 	ignoredUserIDs                            = make(map[[2]string]time.Time)
 	mutedUserIDs                              = make(map[[2]string]time.Time)
 	ownUserID                                 string
@@ -3468,9 +3470,39 @@ func bfv(session *discordgo.Session, guildID, chanID, authorID, messageID string
 	return fmt.Sprintf("%.0f days until Nov 9, 2018", days), nil
 }
 
-func hangman(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	days := math.Floor(time.Since(time.Date(2018, 8, 31, 0, 0, 0, 0, time.Local)).Hours() / 24)
-	return fmt.Sprintf("It's been %.0f days since hangman was suggested", days), nil
+func hangmanCmd(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	if _, found := hangmanGames[chanID]; found {
+		return "There's already a game going in here", nil
+	}
+	game := hangman.NewGame(authorID)
+	hangmanGames[chanID] = game
+	return fmt.Sprintf("```%s```\n`%s`", game.DrawMan(), game.GetGuessedWord()), nil
+}
+
+func guess(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	game, found := hangmanGames[chanID]
+	if !found {
+		return "No game is going, start one with /hangman", nil
+	}
+	if len(args) != 1 || len(args[0]) != 1 {
+		return "", errors.New("/guess <letter>")
+	}
+	correct, err := game.Guess(authorID, args[0][0])
+	if err != nil {
+		return "", err
+	}
+	if correct {
+		if game.IsVictory() {
+			answer := game.GetAnswer()
+			delete(hangmanGames, chanID)
+			return fmt.Sprintf(":100: The word was %s", answer), nil
+		}
+		return fmt.Sprintf("`%s`", game.GetGuessedWord()), nil
+	}
+	if game.IsDefeat() {
+		return fmt.Sprintf("```%s```\nYou lose.", game.DrawMan()), nil
+	}
+	return fmt.Sprintf("```%s```\n`%s`", game.DrawMan(), game.GetGuessedWord()), nil
 }
 
 func playing(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3838,7 +3870,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"army":           commandFunc(army),
 		"grad":           commandFunc(grad),
 		"bfv":            commandFunc(bfv),
-		"hangman":        commandFunc(hangman),
+		"hangman":        commandFunc(hangmanCmd),
+		"guess":          commandFunc(guess),
 		"playing":        commandFunc(playing),
 		"pee":            commandFunc(pee),
 		"peecounter":     commandFunc(peeCounter),
