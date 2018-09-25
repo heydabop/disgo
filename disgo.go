@@ -3463,6 +3463,16 @@ func grad(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%.0f days until May 11, 2018", days), nil
 }
 
+func bfv(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	days := math.Ceil(time.Date(2018, 11, 9, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	return fmt.Sprintf("%.0f days until Nov 9, 2018", days), nil
+}
+
+func hangman(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	days := math.Floor(time.Since(time.Date(2018, 8, 31, 0, 0, 0, 0, time.Local)).Hours() / 24)
+	return fmt.Sprintf("It's been %.0f days since hangman was suggested", days), nil
+}
+
 func playing(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	if authorID != adminID || len(args) < 1 {
 		return "", nil
@@ -3827,6 +3837,8 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"topemoji":       commandFunc(topEmoji),
 		"army":           commandFunc(army),
 		"grad":           commandFunc(grad),
+		"bfv":            commandFunc(bfv),
+		"hangman":        commandFunc(hangman),
 		"playing":        commandFunc(playing),
 		"pee":            commandFunc(pee),
 		"peecounter":     commandFunc(peeCounter),
