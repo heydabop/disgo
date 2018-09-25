@@ -3497,12 +3497,14 @@ func guess(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 			delete(hangmanGames, chanID)
 			return fmt.Sprintf(":100: The word was %s", answer), nil
 		}
-		return fmt.Sprintf("`%s`", game.GetGuessedWord()), nil
+		return fmt.Sprintf("`%s`\n`%s`", game.GetGuessedWord(), game.GetUsedLetters()), nil
 	}
 	if game.IsDefeat() {
-		return fmt.Sprintf("```%s```\nYou lose.", game.DrawMan()), nil
+		man := game.DrawMan()
+		delete(hangmanGames, chanID)
+		return fmt.Sprintf("```%s```\nYou lose.", man), nil
 	}
-	return fmt.Sprintf("```%s```\n`%s`", game.DrawMan(), game.GetGuessedWord()), nil
+	return fmt.Sprintf("```%s```\n`%s`\n`%s`", game.DrawMan(), game.GetGuessedWord(), game.GetUsedLetters()), nil
 }
 
 func playing(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {

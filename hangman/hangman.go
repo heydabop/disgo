@@ -12,8 +12,9 @@ var maxWrongGuesses = len(boards) - 1
 
 type Game struct {
 	answer string
-	guessedLetters []bool
+	correctGuesses []bool
 	numWrongGuesses int
+	usedLetters []byte
 	guesserID string
 }
 
@@ -22,8 +23,9 @@ func NewGame(guesserID string) *Game {
 	answer := wordlist[rand.Intn(len(wordlist))]
 	return &Game{
 		answer: answer,
-		guessedLetters: make([]bool, len(answer)),
+		correctGuesses: make([]bool, len(answer)),
 		numWrongGuesses: 0,
+		usedLetters: make([]byte, 0),
 		guesserID: guesserID,
 	}
 }
@@ -37,18 +39,19 @@ func (g *Game) Guess(guesserID string, guess byte) (bool, error) {
 	for i := range g.answer {
 		if g.answer[i] == guess {
 			correctGuess = true
-			g.guessedLetters[i] = true
+			g.correctGuesses[i] = true
 		}
 	}
 	if correctGuess {
 		return true, nil
 	}
 	g.numWrongGuesses++
+	g.usedLetters = append(g.usedLetters, guess)
 	return false, nil
 }
 
 func (g *Game) IsVictory() bool {
-	for _, a := range g.guessedLetters {
+	for _, a := range g.correctGuesses {
 		if !a {
 			return false
 		}
@@ -71,7 +74,7 @@ func (g *Game) GetGuessedWord() string {
 	answer := strings.ToUpper(g.answer)
 	word := make([]byte, 0, len(answer) * 2)
 	for i := range answer {
-		if (g.guessedLetters[i]) {
+		if (g.correctGuesses[i]) {
 			word = append(word, answer[i])
 		} else {
 			word = append(word, '_')
@@ -79,6 +82,14 @@ func (g *Game) GetGuessedWord() string {
 		word = append(word, ' ')
 	}
 	return string(word)
+}
+
+func (g *Game) GetUsedLetters() string {
+	letters := make([]byte, 0, len(g.usedLetters) * 6)
+	for _, l := range g.usedLetters {
+		letters = append(letters, '~', '~', l, '~', '~', ' ')
+	}
+	return strings.ToUpper(string(letters))
 }
 
 func (g *Game) GetAnswer() string {
