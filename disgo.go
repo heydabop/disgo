@@ -3873,6 +3873,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"bfv":            commandFunc(bfv),
 		"hangman":        commandFunc(hangmanCmd),
 		"guess":          commandFunc(guess),
+		"g":              commandFunc(guess),
 		"playing":        commandFunc(playing),
 		"pee":            commandFunc(pee),
 		"peecounter":     commandFunc(peeCounter),

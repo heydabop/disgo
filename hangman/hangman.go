@@ -2,11 +2,13 @@ package hangman
 
 import (
 	"bytes"
-	"errors"
-	mrand "math/rand"
+	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 )
+
+const maxMinutesBetweenGuesses = 2
 
 var maxWrongGuesses = len(boards) - 1
 
@@ -15,25 +17,26 @@ type Game struct {
 	correctGuesses []bool
 	numWrongGuesses int
 	usedLetters []byte
-	guesserID string
+	authorID string
+	authorLastGuessTime time.Time
 }
 
-func NewGame(guesserID string) *Game {
-	rand := mrand.New(mrand.NewSource(time.Now().UnixNano()))
-	answer := wordlist[rand.Intn(len(wordlist))]
+func NewGame(authorID string) *Game {
+	answer := wordlist[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(wordlist))]
 	return &Game{
 		answer: answer,
 		correctGuesses: make([]bool, len(answer)),
 		numWrongGuesses: 0,
 		usedLetters: make([]byte, 0),
-		guesserID: guesserID,
+		authorID: authorID,
+		authorLastGuessTime: time.Now(),
 	}
 }
 
 func (g *Game) Guess(guesserID string, guess byte) (bool, error) {
 	guess = bytes.ToLower([]byte{guess})[0]
-	if (guesserID != g.guesserID) {
-		return false, errors.New("You can't guess unless you started the game.")
+	if (guesserID != g.authorID && time.Since(g.authorLastGuessTime) < maxMinutesBetweenGuesses * time.Minute) {
+		return false, fmt.Errorf("You can't guess unless you started the game or it's been %d minutes since the last guess.", maxMinutesBetweenGuesses)
 	}
 	correctGuess := false
 	for i := range g.answer {
@@ -41,6 +44,9 @@ func (g *Game) Guess(guesserID string, guess byte) (bool, error) {
 			correctGuess = true
 			g.correctGuesses[i] = true
 		}
+	}
+	if guesserID == g.authorID {
+		g.authorLastGuessTime = time.Now()
 	}
 	if correctGuess {
 		return true, nil
