@@ -4076,7 +4076,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			return
 		}
 		if match := twitchRegex.FindStringSubmatch(m.Content); match != nil {
-			if (match[2] != "videos") {
+			if match[2] != "videos" {
 				executeCommand(s, channel.GuildID, m, []string{"twitch", match[2]})
 				return
 			}
