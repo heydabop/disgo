@@ -1193,6 +1193,10 @@ func maths(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	return "", errors.New("No suitable answer found")
 }
 
+func weather(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return maths(session, guildID, chanID, authorID, messageID, append([]string{"weather"}, args...))
+}
+
 func cputemp(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	output, err := exec.Command("sensors", "coretemp-isa-0000").Output()
 	if err != nil {
@@ -3807,6 +3811,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"spamuser2":      commandFunc(spamuser2),
 		"spamuser3":      commandFunc(spamuser3),
 		"math":           commandFunc(maths),
+		"weather":        commandFunc(weather),
 		"cputemp":        commandFunc(cputemp),
 		"ayy":            commandFunc(ayy),
 		"spamdiscord":    commandFunc(spamdiscord1),
