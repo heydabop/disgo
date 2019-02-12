@@ -3463,14 +3463,26 @@ func army(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%.0f days until June 21, 2018", days), nil
 }
 
-func grad(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+func willGrad(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	days := math.Ceil(time.Date(2018, 5, 11, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
 	return fmt.Sprintf("%.0f days until May 11, 2018", days), nil
 }
 
-func bfv(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	days := math.Ceil(time.Date(2018, 11, 9, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
-	return fmt.Sprintf("%.0f days until Nov 9, 2018", days), nil
+func grad(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	days := math.Ceil(time.Date(2019, 5, 17, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	return fmt.Sprintf("%.0f days until May 17, 2019", days), nil
+}
+
+func bourtney(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	sinceStart := time.Since(time.Date(2018, 5, 14, 8, 0, 0, 0, time.Local))
+	untilEnd := time.Until(time.Date(2058, 10, 2, 17, 0, 0, 0, time.Local))
+	return fmt.Sprintf("%.4f%% of the way to retirement", (sinceStart.Minutes()/untilEnd.Minutes())*100), nil
+}
+
+func ross(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	sinceStart := time.Since(time.Date(2016, 1, 11, 9, 30, 0, 0, time.Local))
+	untilEnd := time.Until(time.Date(2053, 2, 28, 16, 0, 0, 0, time.Local))
+	return fmt.Sprintf("%.4f%% of the way to retirement", (sinceStart.Minutes()/untilEnd.Minutes())*100), nil
 }
 
 func hangmanCmd(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3631,8 +3643,24 @@ func sebbiTime(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
 }
 
-func nielTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+func miroTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	loc, err := time.LoadLocation("Europe/Helsinki")
+	if err != nil {
+		return "", err
+	}
+	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
+}
+
+func nielTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc, err := time.LoadLocation("Europe/Stockholm")
+	if err != nil {
+		return "", err
+	}
+	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
+}
+
+func birdTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	loc, err := time.LoadLocation("Europe/Oslo")
 	if err != nil {
 		return "", err
 	}
@@ -3644,7 +3672,7 @@ func realTime(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return "", err
 	}
-	return time.Now().In(loc).Format("3:04 PM - Mon, Jan _2"), nil
+	return time.Now().In(loc).Format("15:04 - Mon, Jan _2"), nil
 }
 
 func euTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3653,19 +3681,6 @@ func euTime(session *discordgo.Session, guildID, chanID, authorID, messageID str
 		return "", err
 	}
 	loc2, err := time.LoadLocation("Asia/Nicosia")
-	if err != nil {
-		return "", err
-	}
-	now := time.Now()
-	return fmt.Sprintf("%s - %s", now.In(loc1).Format("3:04 PM"), now.In(loc2).Format("3:04 PM")), nil
-}
-
-func usTime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	loc1, err := time.LoadLocation("America/Los_Angeles")
-	if err != nil {
-		return "", err
-	}
-	loc2, err := time.LoadLocation("America/New_York")
 	if err != nil {
 		return "", err
 	}
@@ -3874,8 +3889,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"fortune":        commandFunc(fortune),
 		"topemoji":       commandFunc(topEmoji),
 		"army":           commandFunc(army),
+		"willgrad":       commandFunc(willGrad),
 		"grad":           commandFunc(grad),
-		"bfv":            commandFunc(bfv),
+		"bourtney":       commandFunc(bourtney),
+		"ross":           commandFunc(ross),
 		"hangman":        commandFunc(hangmanCmd),
 		"guess":          commandFunc(guess),
 		"g":              commandFunc(guess),
@@ -3886,12 +3903,15 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"poo":            commandFunc(poop),
 		"sebbitime":      commandFunc(sebbiTime),
 		"nieltime":       commandFunc(nielTime),
+		"mirotime":       commandFunc(miroTime),
+		"birdtime":       commandFunc(birdTime),
+		"twintime":       commandFunc(realTime),
 		"realtime":       commandFunc(realTime),
 		"goodtime":       commandFunc(realTime),
 		"actualtime":     commandFunc(realTime),
 		"eutime":         commandFunc(euTime),
-		"ustime":         commandFunc(usTime),
-		"natime":         commandFunc(usTime),
+		"ustime":         commandFunc(realTime),
+		"natime":         commandFunc(realTime),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
