@@ -1197,6 +1197,10 @@ func weather(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	return maths(session, guildID, chanID, authorID, messageID, append([]string{"weather"}, args...))
 }
 
+func define(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	return maths(session, guildID, chanID, authorID, messageID, append([]string{"define"}, args...))
+}
+
 func cputemp(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	output, err := exec.Command("sensors", "coretemp-isa-0000").Output()
 	if err != nil {
@@ -3827,6 +3831,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"spamuser3":      commandFunc(spamuser3),
 		"math":           commandFunc(maths),
 		"weather":        commandFunc(weather),
+		"define":         commandFunc(define),
 		"cputemp":        commandFunc(cputemp),
 		"ayy":            commandFunc(ayy),
 		"spamdiscord":    commandFunc(spamdiscord1),
