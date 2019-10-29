@@ -4213,7 +4213,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 		return
 	}
 	gameName := ""
-	if p.Game != nil && p.Game.Name != "Spotify" {
+	if p.Game != nil && p.Game.Name != "Spotify" && p.Game.Name != "Custom Status" {
 		gameName = p.Game.Name
 	}
 	/*user, err := s.User(p.User.ID)
