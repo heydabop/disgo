@@ -3489,6 +3489,21 @@ func ross(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%.4f%% of the way to retirement", (sinceStart.Minutes()/untilEnd.Minutes())*100), nil
 }
 
+func christmas(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	now := time.Now()
+	if now.Month() != 12 || now.Day() > 25 {
+		return "It's too early to be asking that", nil
+	} else if now.Day() == 25 {
+		return "Merry Christmas!", nil
+	}
+	days := math.Ceil(time.Date(now.Year(), 12, 25, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	s := "s"
+	if days == 1 {
+		s = ""
+	}
+	return fmt.Sprintf("%.0f day%s until Christmas", days, s), nil
+}
+
 func hangmanCmd(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	if _, found := hangmanGames[chanID]; found {
 		return "There's already a game going in here", nil
@@ -3898,6 +3913,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"grad":           commandFunc(grad),
 		"bourtney":       commandFunc(bourtney),
 		"ross":           commandFunc(ross),
+		"christmas":      commandFunc(christmas),
 		"hangman":        commandFunc(hangmanCmd),
 		"guess":          commandFunc(guess),
 		"g":              commandFunc(guess),
