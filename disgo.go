@@ -36,6 +36,7 @@ import (
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
+	"github.com/heydabop/disgo/google"
 	"github.com/heydabop/disgo/hangman"
 	"github.com/heydabop/disgo/markov"
 	mcrcon "github.com/james4k/rcon"
@@ -101,6 +102,7 @@ var (
 	mutedUserIDs                              = make(map[[2]string]time.Time)
 	ownUserID                                 string
 	ownUserIDint                              uint64
+	pointRegex                                = regexp.MustCompile(`(^\d+\.?\d*)[,\s]+(\d+\.?\d*)$`)
 	rouletteIsRed                             = []bool{true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true, true, false, true, false, true, false, true, false, true, false, false, true, false, true, false, true, false, true}
 	rouletteBets                              = make(map[string][]userBet)
 	rouletteTableValues                       = [][]int{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}, {13, 14, 15}, {16, 17, 18}, {19, 20, 21}, {22, 23, 24}, {25, 26, 27}, {28, 29, 30}, {31, 32, 33}, {34, 35, 36}}
@@ -1191,10 +1193,6 @@ func maths(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 		}
 	}
 	return "", errors.New("No suitable answer found")
-}
-
-func weather(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	return maths(session, guildID, chanID, authorID, messageID, append([]string{"weather"}, args...))
 }
 
 func define(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3705,6 +3703,77 @@ func euTime(session *discordgo.Session, guildID, chanID, authorID, messageID str
 	}
 	now := time.Now()
 	return fmt.Sprintf("%s - %s", now.In(loc1).Format("3:04 PM"), now.In(loc2).Format("3:04 PM")), nil
+}
+
+func weather(sesseion *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	var input string
+	if len(args) == 0 {
+		input = fmt.Sprintf("%s %s", darkSkyLat, darkSkyLng)
+	} else {
+		input = strings.Join(args, " ")
+	}
+
+	var lat, lng float64
+	if match := pointRegex.FindStringSubmatch(input); match != nil {
+		latStr := match[1]
+		lngStr := match[2]
+		var err error
+		if lat, err = strconv.ParseFloat(latStr, 64); err != nil {
+			return "", err
+		}
+		if lng, err = strconv.ParseFloat(lngStr, 64); err != nil {
+			return "", err
+		}
+	} else {
+		point, err := google.Geocode(input, mapsKey)
+		if err != nil {
+			return "", err
+		}
+		lat, lng = point.Lat, point.Lng
+	}
+	res, err := http.Get(fmt.Sprintf("https://api.darksky.net/forecast/%s/%f,%f?exclude=minutely,daily,alerts,flags&units=us&lang=en", darkSkySecret, lat, lng))
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		return "", errors.New(res.Status)
+	}
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	var response struct {
+		Currently struct {
+			Summary             string  `json:"summary"`
+			Temperature         float64 `json:"temperature"`
+			ApparentTemperature float64 `json:"apparentTemperature"`
+			DewPoint            float64 `json:"dewPoint"`
+			Humidity            float64 `json:"humidity"`
+			WindSpeed           float64 `json:"windSpeed"`
+			UvIndex             int     `json:"uvIndex"`
+		} `json:"currently"`
+		Hourly struct {
+			Summary string `json:"summary"`
+		} `json:"hourly"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf(`temperature | %.0f °F (feels like %.0f °F)
+conditions | %s
+relative humidity | %.0f%% (dew point: %.0f °F)
+wind speed | %.1f mph
+uv index | %d
+forecast | %s`,
+		response.Currently.Temperature,
+		response.Currently.ApparentTemperature,
+		strings.ToLower(response.Currently.Summary),
+		response.Currently.Humidity*100,
+		response.Currently.DewPoint,
+		response.Currently.WindSpeed,
+		response.Currently.UvIndex,
+		strings.ToLower(strings.Trim(response.Hourly.Summary, "."))), nil
 }
 
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
