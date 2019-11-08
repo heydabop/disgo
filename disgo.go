@@ -736,7 +736,8 @@ func twitch(session *discordgo.Session, guildID, chanID, authorID, messageID str
 		return "", err
 	}
 	if reply.Stream == nil {
-		return "[Offline]", nil
+		return "", nil
+		//return "[Offline]", nil
 	}
 	return fmt.Sprintf(`%s playing %s
 %s
@@ -1295,7 +1296,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			}
 			continue
 		}
-		suh := rand.Intn(46) + 20
+		suh := rand.Intn(47) + 20
 		currentVoiceChans[guildID] = make(chan bool)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
@@ -2933,6 +2934,18 @@ func ooer(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return string(message), nil
 }
 
+func superooer(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	message := strings.Join(args, " ")
+	var err error
+	for i := 0; i < 10; i++ {
+		message, err = ooer(session, guildID, chanID, authorID, messageID, []string{message})
+		if err != nil {
+			return "", err
+		}
+	}
+	return message, err
+}
+
 func serverAge(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	intGuildID, err := strconv.ParseUint(guildID, 10, 64)
 	if err != nil {
@@ -3889,7 +3902,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	questionRegex := regexp.MustCompile(`^<@!` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
-	greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*([^:].+)$`)
+	//greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*([^:].+)$`)
 	funcMap := map[string]commandFunc{
 		"spam":           commandFunc(spam),
 		"soda":           commandFunc(soda),
@@ -3960,6 +3973,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"toponline":      commandFunc(topOnline),
 		"ooer":           commandFunc(ooer),
 		"zalgo":          commandFunc(ooer),
+		"superooer":      commandFunc(superooer),
 		"timeout":        commandFunc(timeout),
 		"serverage":      commandFunc(serverAge),
 		"kms":            commandFunc(kickme),
@@ -4118,9 +4132,9 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			return
 		}
 
-		if strings.Contains(strings.ToLower(m.Content), "texas") {
+		/*if strings.Contains(strings.ToLower(m.Content), "texas") {
 			s.ChannelMessageSend(m.ChannelID, ":gun: WEEHAW! :cowboy:")
-		}
+		}*/
 
 		/*if typingTimer, valid := typingTimer[m.Author.ID]; valid {
 			typingTimer.Stop()
@@ -4200,10 +4214,10 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			kappa(s, m.ChannelID, m.Author.ID, m.ID)
 			return
 		}
-		if match := greenTextRegex.FindStringSubmatch(m.Content); match != nil {
+		/*if match := greenTextRegex.FindStringSubmatch(m.Content); match != nil {
 			gtext(s, channel.GuildID, m.ChannelID, m.Author.ID, m.ID, []string{strings.Replace(match[1], `'`, `\'`, -1)})
 			return
-		}
+		}*/
 		/*if match := oddshotRegex.FindString(m.Content); match != "" {
 			executeCommand(s, m, []string{"oddshot", match})
 			return
