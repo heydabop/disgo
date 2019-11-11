@@ -1756,32 +1756,6 @@ func lastUserMessage(session *discordgo.Session, guildID, chanID, authorID, mess
 	return fmt.Sprintf("%s sent their last message %s ago", member.User.Username, timeSince), nil
 }
 
-func reminders(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	rows, err := sqlClient.Query(`SELECT author_id, send_time, content FROM reminder WHERE chan_id = $1 AND send_time > now() ORDER BY send_time ASC`, chanID)
-	if err != nil {
-		return "", err
-	}
-	defer rows.Close()
-	message := ""
-	for rows.Next() {
-		var authorID, content string
-		var remindTime time.Time
-		err = rows.Scan(&authorID, &remindTime, &content)
-		if err != nil {
-			return "", err
-		}
-		username, err := getUsername(session, authorID, guildID)
-		if err != nil {
-			return "", err
-		}
-		message += fmt.Sprintf("%s - %s — %s\n", username, remindTime.Format(time.RFC1123Z), content)
-	}
-	if len(message) < 1 {
-		return "The channel has no pending reminders.", nil
-	}
-	return message, nil
-}
-
 func color(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No color specificed")
@@ -3831,7 +3805,6 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 **remindme**
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
-**reminders** - list this channels pending reminders
 **rename** [new username] - renames bot
 **roll** [sides (optional)] [number (optional)] - "rolls" <number> dice with <sides> sides`)
 	if err != nil {
@@ -3950,7 +3923,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"age":            commandFunc(age),
 		"userage":        commandFunc(userage),
 		"lastmessage":    commandFunc(lastUserMessage),
-		"reminders":      commandFunc(reminders),
 		"color":          commandFunc(color),
 		"playtime":       commandFunc(playtime),
 		"recentplaytime": commandFunc(recentPlaytime),
@@ -4022,7 +3994,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	executeCommand := func(s *discordgo.Session, guildID string, m *discordgo.MessageCreate, command []string) bool {
 		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
 			switch command[0] {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "reminders", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute", "pee":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute", "pee":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
