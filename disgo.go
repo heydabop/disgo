@@ -2457,6 +2457,52 @@ Snake - snake - on 1, 5, 9, 12, 14, 16, 19, 23, 27, 30, 32, or 34`+"```")
 	return "", nil
 }
 
+func give(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	if len(args) < 2 {
+		return "", errors.New("/give <user> <amount>")
+	}
+
+	var giveeID string
+	if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+		giveeID = match[1]
+	} else {
+		return "", errors.New("No valid mention found")
+	}
+
+	var amount float64
+	var err error
+	if amount, err = strconv.ParseFloat(args[1], 64); err != nil {
+		return "", err
+	}
+	if amount < 0.1 {
+		return "", errors.New("Given amount must be at least 0.1")
+	}
+
+	var money float64
+	if err := sqlClient.QueryRow(`SELECT money FROM user_money WHERE guild_id = $1 AND user_id = $2`, guildID, authorID).Scan(&money); err != nil {
+		if err == sql.ErrNoRows {
+			money = 10
+			if _, err := sqlClient.Exec(`INSERT INTO user_money(guild_id, user_id, money) VALUES ($1, $2, $3)`, guildID, authorID, money); err != nil {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+	if money < amount {
+		return "", errors.New("Like you can afford that.")
+	}
+
+	if err := changeMoney(guildID, authorID, -amount); err != nil {
+		return "", err
+	}
+	if err := changeMoney(guildID, giveeID, amount); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("Transaction complete. Don't spend it all in one place <@%s>...or do, whatever.", giveeID), nil
+}
+
 func topcommand(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", errors.New("No command provided")
@@ -3933,6 +3979,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"roulette":       commandFunc(roulette),
 		"bet":            commandFunc(bet),
 		"spin":           commandFunc(roulette),
+		"give":           commandFunc(give),
 		"topcommand":     commandFunc(topcommand),
 		"money":          commandFunc(money),
 		"gameactivity":   commandFunc(gameactivity),
