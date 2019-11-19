@@ -18,7 +18,6 @@ import (
 	"math"
 	"math/big"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,14 +31,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Craftserve/mcstatus"
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
 	"github.com/heydabop/disgo/google"
 	"github.com/heydabop/disgo/hangman"
 	"github.com/heydabop/disgo/markov"
-	mcrcon "github.com/james4k/rcon"
 	_ "github.com/lib/pq"
 	"github.com/nfnt/resize"
 	"github.com/satori/go.uuid"
@@ -2113,21 +2110,6 @@ func nest(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%s/%s.png", nestlogRoot, dateStr), nil
 }
 
-func minecraft(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	if guildID != minecraftGuildID {
-		return "", nil
-	}
-	server, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("127.0.0.1:25565"))
-	if err != nil {
-		return "", err
-	}
-	status, _, err := mcstatus.CheckStatus(server)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s:%d\n[%d/%d] Online: %s", minecraftServer, minecraftPort, status.Players, status.Slots, strings.Join(status.PlayersSample, ", ")), nil
-}
-
 func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	err := gambleChannelCheck(guildID, chanID)
 	if err != nil {
@@ -3975,7 +3957,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"activity":       commandFunc(activity),
 		"botuptime":      commandFunc(botuptime),
 		"nest":           commandFunc(nest),
-		"minecraft":      commandFunc(minecraft),
 		"roulette":       commandFunc(roulette),
 		"bet":            commandFunc(bet),
 		"spin":           commandFunc(roulette),
@@ -4162,27 +4143,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		/*if strings.Contains(strings.ToLower(m.Content), "vape") || strings.Contains(strings.ToLower(m.Content), "v/\\") || strings.Contains(strings.ToLower(m.Content), "\\//\\") || strings.Contains(strings.ToLower(m.Content), "\\\\//\\") {
 			s.ChannelMessageSend(m.ChannelID, "🆅🅰🅿🅴 🅽🅰🆃🅸🅾🅽")
 		}*/
-		if m.ChannelID == minecraftChanID {
-			username, found := minecraftUsernameMap[m.Author.ID]
-			if !found {
-				if len(m.Author.Username) > 16 {
-					username = fmt.Sprintf("%s…", m.Author.Username[:16])
-				} else {
-					username = m.Author.Username
-				}
-			}
-			conn, err := mcrcon.Dial(fmt.Sprintf("127.0.0.1:%s", mcrconPort), mcrconPass)
-			if err == nil {
-				_, err := conn.Write(fmt.Sprintf("say %s> %s", username, m.Content))
-				if err != nil {
-					s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("`ERROR BRIDGING MESSAGE: %s", err.Error()))
-					fmt.Println(err.Error())
-				}
-			} else {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("`ERROR BRIDGING MESSAGE: %s", err.Error()))
-				fmt.Println(err.Error())
-			}
-		}
 		if match := meanRegex.FindString(m.Content); match != "" {
 			respond := rand.Intn(3)
 			if respond == 0 {
@@ -4456,87 +4416,6 @@ func handleMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 	if _, err = sqlClient.Exec(`UPDATE message SET content = $1 WHERE id = $2`, m.Content, messageID); err != nil {
 		fmt.Println("ERROR handling MessageUpdate", err.Error())
 		return
-	}
-}
-
-func tailMinecraftLog(session *discordgo.Session) {
-	logTail := exec.Command("tail", "-F", "-n", "0", minecraftLogPath)
-	logOut, err := logTail.StdoutPipe()
-	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	if err := logTail.Start(); err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-	bufLogOut := bufio.NewScanner(logOut)
-	logChan := make(chan string)
-	go minecraftToDiscord(session, logChan)
-	for bufLogOut.Scan() {
-		logChan <- bufLogOut.Text()
-	}
-	if err := bufLogOut.Err(); err != nil {
-		fmt.Println(err.Error())
-	}
-}
-
-func minecraftToDiscord(session *discordgo.Session, logChan chan string) {
-	joinedRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+) joined the game$`)
-	leftRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+) left the game$`)
-	chatRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: <(\w+)> (.*)$`)
-	serverChatRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: \[Server\] (.*)$`)
-	achievementRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+ has just earned the achievement \[.*?\])$`)
-	//deathRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: (\w+) (?:was|walked|drowned|experienced|blew|hit|fell|went|walked|tried|got|starved|suffocated|withered)`)
-	usernames := make(map[string]bool)
-
-	for {
-		select {
-		case logLine := <-logChan:
-			if match := chatRegex.FindStringSubmatch(logLine); match != nil {
-				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("%s> %s", match[1], match[2]))
-				break
-			}
-			if match := joinedRegex.FindStringSubmatch(logLine); match != nil {
-				usernames[match[1]] = true
-				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s has joined*", match[1]))
-				break
-			}
-			if match := leftRegex.FindStringSubmatch(logLine); match != nil {
-				usernames[match[1]] = false
-				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s has left*", match[1]))
-				break
-			}
-			if match := serverChatRegex.FindStringSubmatch(logLine); match != nil {
-				session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("[Server] %s", match[1]))
-				break
-			}
-			if match := achievementRegex.FindStringSubmatch(logLine); match != nil {
-				session.ChannelMessageSend(minecraftChanID, match[1])
-				break
-			}
-			var otherRegexes []*regexp.Regexp
-			for username, online := range usernames {
-				if online {
-					regex, err := regexp.Compile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: ((` + username + `) .*)$`)
-					if err != nil {
-						fmt.Println(err.Error())
-						break
-					}
-					otherRegexes = append(otherRegexes, regex)
-				}
-			}
-			for _, regex := range otherRegexes {
-				if match := regex.FindStringSubmatch(logLine); match != nil {
-					lostConnectionRegex := regexp.MustCompile(`(?i)^\[\d\d:\d\d:\d\d\] \[Server thread\/INFO\]: ` + match[2] + ` lost connection`)
-					if lostConnectionRegex.MatchString(logLine) {
-						break
-					}
-					session.ChannelMessageSend(minecraftChanID, fmt.Sprintf("*%s*", match[1]))
-					break
-				}
-			}
-		}
 	}
 }
 
@@ -4852,10 +4731,6 @@ func main() {
 		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
 	}
 	rows.Close()
-
-	if len(minecraftChanID) > 0 {
-		go tailMinecraftLog(client)
-	}
 
 	//nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
 	//time.AfterFunc(nextRun.Sub(now), normalizeKarma)

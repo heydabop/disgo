@@ -3,14 +3,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:9c0e9f196d6e87f972adafc87b79eac484aee6af34c302cc9e73981bff78bfac"
-  name = "github.com/Craftserve/mcstatus"
-  packages = ["."]
-  pruneopts = ""
-  revision = "0de2e881e8880fc7e9afd21d4bae7a99b294f989"
-
-[[projects]]
-  branch = "master"
   digest = "1:3537775a877a5788cf3b904396d93a9432de305a91062505b00054fae8f99b2b"
   name = "github.com/bwmarrin/dgvoice"
   packages = ["."]
@@ -40,14 +32,6 @@
   packages = ["similar"]
   pruneopts = ""
   revision = "315982eabee9f9171138b629a5d02e2943a26a75"
-
-[[projects]]
-  branch = "master"
-  digest = "1:432e9d883a47bf08a577db6738ada6ec19c21cf74df1949bb15e25c189222e10"
-  name = "github.com/james4k/rcon"
-  packages = ["."]
-  pruneopts = ""
-  revision = "8fbb8268b60ac3303900326e126be05d504ab63d"
 
 [[projects]]
   branch = "master"
@@ -111,11 +95,9 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/Craftserve/mcstatus",
     "github.com/bwmarrin/dgvoice",
     "github.com/bwmarrin/discordgo",
     "github.com/gyuho/goling/similar",
-    "github.com/james4k/rcon",
     "github.com/lib/pq",
     "github.com/nfnt/resize",
     "github.com/satori/go.uuid",
