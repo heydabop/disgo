@@ -31,11 +31,7 @@
 
 [[constraint]]
   name = "github.com/bwmarrin/discordgo"
-  version = "0.18.0"
-
-[[constraint]]
-  branch = "master"
-  name = "github.com/chuckpreslar/rcon"
+  version = "0.20.1"
 
 [[constraint]]
   branch = "master"

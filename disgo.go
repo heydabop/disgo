@@ -1681,7 +1681,7 @@ func age(session *discordgo.Session, guildID, chanID, authorID, messageID string
 	if member.User == nil {
 		return "", errors.New("No user found")
 	}
-	timeJoined, err := time.Parse(time.RFC3339Nano, member.JoinedAt)
+	timeJoined, err := member.JoinedAt.Parse()
 	if err != nil {
 		return "", err
 	}
@@ -2811,7 +2811,7 @@ func voicekick(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	}
 
 	newChanName := fmt.Sprintf("kick-%04d", rand.Intn(10000))
-	newChan, err := session.GuildChannelCreate(guildID, newChanName, "voice")
+	newChan, err := session.GuildChannelCreate(guildID, newChanName, discordgo.ChannelTypeGuildVoice)
 	if err != nil {
 		return "", err
 	}
