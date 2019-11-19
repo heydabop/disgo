@@ -74,17 +74,6 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e62a8b783b78a1d166f7667e4577a446f2a6898b7e68d03fdb4f6f3e35447a68"
-  name = "golang.org/x/net"
-  packages = [
-    "html",
-    "html/atom",
-  ]
-  pruneopts = ""
-  revision = "892bf7b0c6e2f93b51166bf3882e50277fa5afc6"
-
-[[projects]]
-  branch = "master"
   digest = "1:fbe239a411358e541d689760aa30229789005341b51ae8db1905d92c491a88dc"
   name = "layeh.com/gopus"
   packages = ["."]
@@ -101,8 +90,6 @@
     "github.com/lib/pq",
     "github.com/nfnt/resize",
     "github.com/satori/go.uuid",
-    "golang.org/x/net/html",
-    "golang.org/x/net/html/atom",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
