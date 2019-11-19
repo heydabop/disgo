@@ -37,6 +37,7 @@ import (
 	"github.com/heydabop/disgo/google"
 	"github.com/heydabop/disgo/hangman"
 	"github.com/heydabop/disgo/markov"
+	twitchApi "github.com/heydabop/disgo/twitch"
 	_ "github.com/lib/pq"
 	"github.com/nfnt/resize"
 	"github.com/satori/go.uuid"
@@ -694,49 +695,11 @@ func twitch(session *discordgo.Session, guildID, chanID, authorID, messageID str
 		return "", errors.New("No stream provided")
 	}
 	streamName := args[0]
-	client := http.Client{}
-	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", url.QueryEscape(streamName)), nil)
+	streamInfo, err := twitchApi.StreamInfo(streamName, twitchClientID)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Add("Client-ID", twitchClientID)
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var reply struct {
-		Stream *struct {
-			ID         int     `json:"_id"`
-			AverageFps float64 `json:"average_fps"`
-			Game       string  `json:"game"`
-			Viewers    int     `json:"viewers"`
-			Channel    struct {
-				DisplayName string `json:"display_name"`
-				Name        string `json:"name"`
-				Status      string `json:"status"`
-			} `json:"channel"`
-			VideoHeight int `json:"video_height"`
-		} `json:"stream"`
-	}
-	err = json.Unmarshal(body, &reply)
-	if err != nil {
-		return "", err
-	}
-	if reply.Stream == nil {
-		return "", nil
-		//return "[Offline]", nil
-	}
-	return fmt.Sprintf(`%s playing %s
-%s
-%d viewers; %dp @ %.f FPS`, reply.Stream.Channel.Name, reply.Stream.Game, reply.Stream.Channel.Status, reply.Stream.Viewers, reply.Stream.VideoHeight, math.Floor(reply.Stream.AverageFps+0.5)), nil
+	return streamInfo, nil
 }
 
 func top(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
