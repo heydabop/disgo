@@ -2002,6 +2002,111 @@ func activity(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	return "", nil
 }
 
+func activityDay(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	var rows *sql.Rows
+	var err error
+	var username string
+	channel, err := session.State.Channel(chanID)
+	if err != nil {
+		return "", err
+	}
+	chanIDint, err := strconv.ParseUint(chanID, 10, 64)
+	if err != nil {
+		return "", err
+	}
+	if len(args) > 0 {
+		var userID string
+		var err error
+		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
+			userID = match[1]
+		} else {
+			userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
+			if err != nil {
+				return "", err
+			}
+		}
+		username, err = getUsername(session, userID, guildID)
+		if err != nil {
+			return "", err
+		}
+		userIDint, err := strconv.ParseUint(userID, 10, 64)
+		if err != nil {
+			return "", err
+		}
+		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id = $2 ORDER BY create_date ASC`, chanIDint, userIDint)
+	} else {
+		rows, err = sqlClient.Query(`SELECT create_date FROM message WHERE chan_id = $1 AND author_id != $2 ORDER BY create_date ASC`, chanIDint, ownUserIDint)
+	}
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	dayCount := make([]uint64, 7)
+	var firstTime, msgTime time.Time
+	if rows.Next() {
+		err = rows.Scan(&firstTime)
+		if err != nil {
+			return "", err
+		}
+		firstTime = firstTime.Local()
+		if err != nil {
+			return "", err
+		}
+		dayCount[firstTime.Weekday()]++
+	}
+	for rows.Next() {
+		err = rows.Scan(&msgTime)
+		if err != nil {
+			return "", err
+		}
+		msgTime = msgTime.Local()
+		if err != nil {
+			return "", err
+		}
+		dayCount[msgTime.Weekday()]++
+	}
+
+	datapoints := ""
+	maxPerDay := uint64(0)
+	for i := 0; i <= 6; i++ {
+		if dayCount[i] > maxPerDay {
+			maxPerDay = dayCount[i]
+		}
+		datapoints += fmt.Sprintf("%d %d\n", i, dayCount[i])
+	}
+
+	datapointsFile, err := ioutil.TempFile("", "disgo")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(datapointsFile.Name())
+	defer datapointsFile.Close()
+	plotFile, err := ioutil.TempFile("", "disgo")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(plotFile.Name())
+	defer plotFile.Close()
+	err = ioutil.WriteFile(datapointsFile.Name(), []byte(datapoints), os.ModeTemporary)
+	if err != nil {
+		return "", err
+	}
+
+	title := fmt.Sprintf("#%s since %s", channel.Name, firstTime.Format(time.RFC1123Z))
+	if len(username) > 0 {
+		title = fmt.Sprintf("%s in #%s since %s", username, channel.Name, firstTime.Format(time.RFC1123Z))
+	}
+	err = exec.Command("gnuplot", "-e", fmt.Sprintf(`set terminal png size 700,400; set out "%s"; set key off; set xlabel "Day of Week"; set ylabel "Messages"; set yrange [0:%d]; set xrange [-1:7]; set boxwidth 0.75; set style fill solid; set xtics nomirror; set title noenhanced "%s"; plot "%s" using 1:2:xtic(1) with boxes`, plotFile.Name(), uint64(math.Ceil(float64(maxPerDay)*1.1)), title, datapointsFile.Name())).Run()
+	if err != nil {
+		return "", err
+	}
+	_, err = session.ChannelFileSend(chanID, plotFile.Name()+".png", plotFile)
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func botuptime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	uptime := time.Since(startTime)
 	days := "days"
@@ -3865,6 +3970,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"playtime":       commandFunc(playtime),
 		"recentplaytime": commandFunc(recentPlaytime),
 		"activity":       commandFunc(activity),
+		"activityday":    commandFunc(activityDay),
 		"botuptime":      commandFunc(botuptime),
 		"nest":           commandFunc(nest),
 		"roulette":       commandFunc(roulette),
