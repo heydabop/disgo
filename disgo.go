@@ -3783,6 +3783,8 @@ func weather(sesseion *discordgo.Session, guildID, chanID, authorID, messageID s
 			DewPoint            float64 `json:"dewPoint"`
 			Humidity            float64 `json:"humidity"`
 			WindSpeed           float64 `json:"windSpeed"`
+			WindGust            float64 `json:"windGust"`
+			WindBearing         int     `json:"windBearing"`
 			UvIndex             int     `json:"uvIndex"`
 		} `json:"currently"`
 		Hourly struct {
@@ -3795,7 +3797,7 @@ func weather(sesseion *discordgo.Session, guildID, chanID, authorID, messageID s
 	return fmt.Sprintf(`temperature | %.0f °F (feels like %.0f °F)
 conditions | %s
 relative humidity | %.0f%% (dew point: %.0f °F)
-wind speed | %.1f mph
+wind | %.1f mph from %d° (gusts: %.1f mph)
 uv index | %d
 forecast | %s`,
 		response.Currently.Temperature,
@@ -3804,6 +3806,8 @@ forecast | %s`,
 		response.Currently.Humidity*100,
 		response.Currently.DewPoint,
 		response.Currently.WindSpeed,
+		response.Currently.WindBearing,
+		response.Currently.WindGust,
 		response.Currently.UvIndex,
 		strings.ToLower(strings.Trim(response.Hourly.Summary, "."))), nil
 }
