@@ -2718,15 +2718,24 @@ func lastPlayed(session *discordgo.Session, guildID, chanID, authorID, messageID
 	if err != nil {
 		return "", err
 	}
-	var game *discordgo.Game
+	var games []*discordgo.Game
 	for _, presence := range guild.Presences {
 		if presence.User != nil && presence.User.ID == userID {
-			game = presence.Game
+			if presence.Game != nil {
+				games = []*discordgo.Game{presence.Game}
+			}
+			if presence.Activities != nil {
+				games = append(games, presence.Activities...)
+			}
 			break
 		}
 	}
-	if game != nil {
-		return fmt.Sprintf("%s is currently playing %s", username, game.Name), nil
+	if games != nil {
+		for _, g := range games {
+			if g.Type == discordgo.GameTypeGame {
+				return fmt.Sprintf("%s is currently playing %s", username, g.Name), nil
+			}
+		}
 	}
 	guildIDint, err := strconv.ParseUint(guild.ID, 10, 64)
 	if err != nil {
@@ -4307,8 +4316,15 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 		return
 	}
 	gameName := ""
-	if p.Game != nil && p.Game.Name != "Spotify" && p.Game.Name != "Custom Status" {
+	if  p.Game != nil && p.Game.Type == discordgo.GameTypeGame {
 		gameName = p.Game.Name
+	} else if p.Activities != nil {
+		for _, g := range p.Activities {
+			if g.Type == discordgo.GameTypeGame {
+				gameName = g.Name
+				break
+			}
+		}
 	}
 	/*user, err := s.User(p.User.ID)
 	if err != nil {

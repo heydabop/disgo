@@ -26,7 +26,7 @@
 
 [[constraint]]
   name = "github.com/bwmarrin/discordgo"
-  version = "0.20.1"
+  revision = "b37325c2241b2fdde154900432a36c98f469a4d4"
 
 [[constraint]]
   branch = "master"
