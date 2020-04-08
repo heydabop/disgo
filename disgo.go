@@ -4637,7 +4637,15 @@ func main() {
 		return
 	}
 
-	client.AddHandler(makeMessageCreate())
+	messageCreateFunc := makeMessageCreate()
+
+	client.AddHandler(messageCreateFunc)
+	client.AddHandler(func(s *discordgo.Session, m *discordgo.MessageUpdate) {
+		message := discordgo.MessageCreate{
+			Message: m.Message,
+		}
+		messageCreateFunc(s, &message)
+	})
 	client.AddHandler(handlePresenceUpdate)
 	//client.AddHandler(handleTypingStart)
 	client.AddHandler(handleVoiceUpdate)
