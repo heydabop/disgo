@@ -1254,7 +1254,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			}
 			continue
 		}
-		suh := rand.Intn(67)
+		suh := rand.Intn(69)
 		currentVoiceChans[guildID] = make(chan bool)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
@@ -4182,12 +4182,14 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 				}
 			}
 		}
-		if match := botRegex.FindString(m.Content); match != "" {
-			if rand.Intn(4) == 0 {
-				go func() {
-					s.MessageReactionAdd(m.ChannelID, m.ID, "🤖")
-					s.MessageReactionAdd(m.ChannelID, m.ID, "👋")
-				}()
+		if blocked, found := guildReactBlacklist[channel.GuildID]; !found || !blocked {
+			if match := botRegex.FindString(m.Content); match != "" {
+				if rand.Intn(4) == 0 {
+					go func() {
+						s.MessageReactionAdd(m.ChannelID, m.ID, "🤖")
+						s.MessageReactionAdd(m.ChannelID, m.ID, "👋")
+					}()
+				}
 			}
 		}
 
@@ -4316,7 +4318,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 		return
 	}
 	gameName := ""
-	if  p.Game != nil && p.Game.Type == discordgo.GameTypeGame {
+	if p.Game != nil && p.Game.Type == discordgo.GameTypeGame {
 		gameName = p.Game.Name
 	} else if p.Activities != nil {
 		for _, g := range p.Activities {
