@@ -3930,7 +3930,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
 	botRegex := regexp.MustCompile(`(?i)(^|\s)(bot|robot)($|\s)`)
 	questionRegex := regexp.MustCompile(`^<@!` + ownUserID + `>.*\w+.*\?$`)
-	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*?)\s+in the chat`)
+	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
 	//greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*([^:].+)$`)
 	funcMap := map[string]commandFunc{
