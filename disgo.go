@@ -4286,7 +4286,7 @@ func updateGame(s *discordgo.Session) {
 		if index >= len(gamelist) {
 			currentGame = ""
 		} else {
-			currentGame = gamelist[index]
+			currentGame = strings.TrimSpace(gamelist[index])
 		}
 	}
 	userGuilds, err := s.UserGuilds(100, "", "")
@@ -4319,11 +4319,11 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	}
 	gameName := ""
 	if p.Game != nil && p.Game.Type == discordgo.GameTypeGame {
-		gameName = p.Game.Name
+		gameName = strings.TrimSpace(p.Game.Name)
 	} else if p.Activities != nil {
 		for _, g := range p.Activities {
 			if g.Type == discordgo.GameTypeGame {
-				gameName = g.Name
+				gameName = strings.TrimSpace(g.Name)
 				break
 			}
 		}
@@ -4687,8 +4687,15 @@ func main() {
 			userMap := make(map[string]bool)
 			for _, presence := range guild.Presences {
 				gameName := ""
-				if presence.Game != nil {
-					gameName = presence.Game.Name
+				if presence.Game != nil && presence.Game.Type == discordgo.GameTypeGame {
+					gameName = strings.TrimSpace(presence.Game.Name)
+				} else if presence.Activities != nil {
+					for _, g := range presence.Activities {
+						if g.Type == discordgo.GameTypeGame {
+							gameName = strings.TrimSpace(g.Name)
+							break
+						}
+					}
 				}
 				userID, err := strconv.ParseUint(presence.User.ID, 10, 64)
 				if err != nil {
