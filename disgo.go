@@ -979,15 +979,25 @@ func spamuser(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	if err != nil {
 		return "", err
 	}
-	realChanID, err := strconv.ParseUint(chanID, 10, 64)
-	if err != nil {
-		return "", err
-	}
 	realUserID, err := strconv.ParseUint(userID, 10, 64)
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND author_id = $2`, realChanID, realUserID)
+
+	var chanIDs uint64Array
+	guild, err := session.State.Guild(guildID)
+	if err != nil {
+		return "", err
+	}
+	for _, channel := range guild.Channels {
+		intChanID, err := strconv.ParseUint(channel.ID, 10, 64)
+		if err != nil {
+			return "", err
+		}
+		chanIDs = append(chanIDs, intChanID)
+	}
+
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = ANY($1) AND author_id = $2`, chanIDs, realUserID)
 	if err != nil {
 		return "", err
 	}
@@ -1048,11 +1058,20 @@ func spamuser3(session *discordgo.Session, guildID, chanID, authorID, messageID 
 }
 
 func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string, markovOrder int) (string, error) {
-	realChanID, err := strconv.ParseUint(chanID, 10, 64)
+	var chanIDs uint64Array
+	guild, err := session.State.Guild(guildID)
 	if err != nil {
 		return "", err
 	}
-	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = $1 AND content != '' AND author_id != $2`, realChanID, ownUserID)
+	for _, channel := range guild.Channels {
+		intChanID, err := strconv.ParseUint(channel.ID, 10, 64)
+		if err != nil {
+			return "", err
+		}
+		chanIDs = append(chanIDs, intChanID)
+	}
+
+	rows, err := sqlClient.Query(`SELECT content FROM message WHERE chan_id = ANY ($1) AND content != '' AND author_id != $2`, chanIDs, ownUserID)
 	if err != nil {
 		return "", err
 	}
@@ -1086,7 +1105,7 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 		if err != nil {
 			return "", err
 		}
-		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = $2`, fmt.Sprintf("%%%s%%", outStr), realChanID).Scan(&numRows); err != nil {
+		if err := sqlClient.QueryRow(`SELECT count(id) FROM message WHERE content LIKE $1 AND chan_id = ANY ($2)`, fmt.Sprintf("%%%s%%", outStr), chanIDs).Scan(&numRows); err != nil {
 			return "", err
 		}
 	}
