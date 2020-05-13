@@ -2,95 +2,19 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 9.6.5
--- Dumped by pg_dump version 9.6.5
+-- Dumped from database version 12.2 (Debian 12.2-4)
+-- Dumped by pg_dump version 12.2 (Debian 12.2-4)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
 SET check_function_bodies = false;
+SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
-
-SET search_path = public, pg_catalog;
-
-ALTER TABLE IF EXISTS ONLY public.vote DROP CONSTRAINT IF EXISTS vote_message_id_fkey;
-ALTER TABLE IF EXISTS ONLY public.error_ip DROP CONSTRAINT IF EXISTS error_ip_error_id_fkey;
-DROP TRIGGER IF EXISTS message_update ON public.message;
-ALTER TABLE IF EXISTS ONLY public.vote DROP CONSTRAINT IF EXISTS vote_pkey;
-ALTER TABLE IF EXISTS ONLY public.voice_state DROP CONSTRAINT IF EXISTS voice_state_pkey;
-ALTER TABLE IF EXISTS ONLY public.user_presence DROP CONSTRAINT IF EXISTS user_presence_pkey;
-ALTER TABLE IF EXISTS ONLY public.user_money DROP CONSTRAINT IF EXISTS user_money_guild_id_user_id_key;
-ALTER TABLE IF EXISTS ONLY public.user_karma DROP CONSTRAINT IF EXISTS user_karma_guild_id_user_id_key;
-ALTER TABLE IF EXISTS ONLY public.shipment DROP CONSTRAINT IF EXISTS shipment_pkey;
-ALTER TABLE IF EXISTS ONLY public.shipment DROP CONSTRAINT IF EXISTS shipment_carrier_tracking_number_author_id_key;
-ALTER TABLE IF EXISTS ONLY public.reminder DROP CONSTRAINT IF EXISTS reminder_pkey;
-ALTER TABLE IF EXISTS ONLY public.pee_log DROP CONSTRAINT IF EXISTS pee_log_create_date_user_id_key;
-ALTER TABLE IF EXISTS ONLY public.own_username DROP CONSTRAINT IF EXISTS own_username_pkey;
-ALTER TABLE IF EXISTS ONLY public.message DROP CONSTRAINT IF EXISTS message_pkey;
-ALTER TABLE IF EXISTS ONLY public.error DROP CONSTRAINT IF EXISTS error_pkey;
-ALTER TABLE IF EXISTS ONLY public.error_ip DROP CONSTRAINT IF EXISTS error_ip_error_id_ip_key;
-ALTER TABLE IF EXISTS ONLY public.discord_quote DROP CONSTRAINT IF EXISTS discord_quote_pkey;
-ALTER TABLE IF EXISTS public.vote ALTER COLUMN id DROP DEFAULT;
-ALTER TABLE IF EXISTS public.voice_state ALTER COLUMN id DROP DEFAULT;
-ALTER TABLE IF EXISTS public.user_presence ALTER COLUMN id DROP DEFAULT;
-ALTER TABLE IF EXISTS public.shipment ALTER COLUMN id DROP DEFAULT;
-ALTER TABLE IF EXISTS public.reminder ALTER COLUMN id DROP DEFAULT;
-ALTER TABLE IF EXISTS public.own_username ALTER COLUMN id DROP DEFAULT;
-ALTER TABLE IF EXISTS public.discord_quote ALTER COLUMN id DROP DEFAULT;
-DROP SEQUENCE IF EXISTS public.vote_id_seq;
-DROP TABLE IF EXISTS public.vote;
-DROP SEQUENCE IF EXISTS public.voice_state_id_seq;
-DROP TABLE IF EXISTS public.voice_state;
-DROP SEQUENCE IF EXISTS public.user_presence_id_seq;
-DROP TABLE IF EXISTS public.user_presence;
-DROP TABLE IF EXISTS public.user_money;
-DROP TABLE IF EXISTS public.user_karma;
-DROP SEQUENCE IF EXISTS public.shipment_id_seq;
-DROP TABLE IF EXISTS public.shipment;
-DROP SEQUENCE IF EXISTS public.reminder_id_seq;
-DROP TABLE IF EXISTS public.reminder;
-DROP TABLE IF EXISTS public.pee_log;
-DROP SEQUENCE IF EXISTS public.own_username_id_seq;
-DROP TABLE IF EXISTS public.own_username;
-DROP TABLE IF EXISTS public.message;
-DROP TABLE IF EXISTS public.error_ip;
-DROP TABLE IF EXISTS public.error;
-DROP SEQUENCE IF EXISTS public.discord_quote_id_seq;
-DROP TABLE IF EXISTS public.discord_quote;
-DROP FUNCTION IF EXISTS public.on_record_update();
-DROP EXTENSION IF EXISTS pgcrypto;
-DROP EXTENSION IF EXISTS plpgsql;
-DROP SCHEMA IF EXISTS public;
---
--- Name: public; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA public;
-
-
---
--- Name: SCHEMA public; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON SCHEMA public IS 'standard public schema';
-
-
---
--- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
-
-
---
--- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
-
 
 --
 -- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
@@ -106,26 +30,24 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
 
 
-SET search_path = public, pg_catalog;
-
 --
 -- Name: on_record_update(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION on_record_update() RETURNS trigger
+CREATE FUNCTION public.on_record_update() RETURNS trigger
     LANGUAGE plpgsql
     AS $$ begin new.update_date := now(); return new; end; $$;
 
 
 SET default_tablespace = '';
 
-SET default_with_oids = false;
+SET default_table_access_method = heap;
 
 --
 -- Name: discord_quote; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE discord_quote (
+CREATE TABLE public.discord_quote (
     id integer NOT NULL,
     chan_id character varying(30) NOT NULL,
     author_id character varying(30),
@@ -139,7 +61,7 @@ CREATE TABLE discord_quote (
 -- Name: discord_quote_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE discord_quote_id_seq
+CREATE SEQUENCE public.discord_quote_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -151,15 +73,15 @@ CREATE SEQUENCE discord_quote_id_seq
 -- Name: discord_quote_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE discord_quote_id_seq OWNED BY discord_quote.id;
+ALTER SEQUENCE public.discord_quote_id_seq OWNED BY public.discord_quote.id;
 
 
 --
 -- Name: error; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE error (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
+CREATE TABLE public.error (
+    id uuid DEFAULT public.gen_random_uuid() NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     command text NOT NULL,
     args text,
@@ -172,7 +94,7 @@ CREATE TABLE error (
 -- Name: error_ip; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE error_ip (
+CREATE TABLE public.error_ip (
     error_id uuid NOT NULL,
     ip inet NOT NULL
 );
@@ -182,7 +104,7 @@ CREATE TABLE error_ip (
 -- Name: message; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE message (
+CREATE TABLE public.message (
     id numeric NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     chan_id numeric NOT NULL,
@@ -196,7 +118,7 @@ CREATE TABLE message (
 -- Name: own_username; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE own_username (
+CREATE TABLE public.own_username (
     id integer NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     author_id character varying(30) NOT NULL,
@@ -210,7 +132,7 @@ CREATE TABLE own_username (
 -- Name: own_username_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE own_username_id_seq
+CREATE SEQUENCE public.own_username_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -222,14 +144,14 @@ CREATE SEQUENCE own_username_id_seq
 -- Name: own_username_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE own_username_id_seq OWNED BY own_username.id;
+ALTER SEQUENCE public.own_username_id_seq OWNED BY public.own_username.id;
 
 
 --
 -- Name: pee_log; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE pee_log (
+CREATE TABLE public.pee_log (
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     user_id character varying(30)
 );
@@ -239,7 +161,7 @@ CREATE TABLE pee_log (
 -- Name: reminder; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE reminder (
+CREATE TABLE public.reminder (
     id integer NOT NULL,
     chan_id character varying(30) NOT NULL,
     author_id character varying(30) NOT NULL,
@@ -252,7 +174,7 @@ CREATE TABLE reminder (
 -- Name: reminder_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE reminder_id_seq
+CREATE SEQUENCE public.reminder_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -264,14 +186,14 @@ CREATE SEQUENCE reminder_id_seq
 -- Name: reminder_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE reminder_id_seq OWNED BY reminder.id;
+ALTER SEQUENCE public.reminder_id_seq OWNED BY public.reminder.id;
 
 
 --
 -- Name: shipment; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE shipment (
+CREATE TABLE public.shipment (
     id integer NOT NULL,
     carrier text NOT NULL,
     tracking_number text NOT NULL,
@@ -284,7 +206,7 @@ CREATE TABLE shipment (
 -- Name: shipment_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE shipment_id_seq
+CREATE SEQUENCE public.shipment_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -296,14 +218,14 @@ CREATE SEQUENCE shipment_id_seq
 -- Name: shipment_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE shipment_id_seq OWNED BY shipment.id;
+ALTER SEQUENCE public.shipment_id_seq OWNED BY public.shipment.id;
 
 
 --
 -- Name: user_karma; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE user_karma (
+CREATE TABLE public.user_karma (
     guild_id character varying(30) NOT NULL,
     user_id character varying(30) NOT NULL,
     karma integer NOT NULL
@@ -314,7 +236,7 @@ CREATE TABLE user_karma (
 -- Name: user_money; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE user_money (
+CREATE TABLE public.user_money (
     guild_id character varying(30) NOT NULL,
     user_id character varying(30) NOT NULL,
     money double precision NOT NULL
@@ -325,7 +247,7 @@ CREATE TABLE user_money (
 -- Name: user_presence; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE user_presence (
+CREATE TABLE public.user_presence (
     id integer NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     guild_id numeric NOT NULL,
@@ -339,7 +261,7 @@ CREATE TABLE user_presence (
 -- Name: user_presence_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE user_presence_id_seq
+CREATE SEQUENCE public.user_presence_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -351,14 +273,14 @@ CREATE SEQUENCE user_presence_id_seq
 -- Name: user_presence_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE user_presence_id_seq OWNED BY user_presence.id;
+ALTER SEQUENCE public.user_presence_id_seq OWNED BY public.user_presence.id;
 
 
 --
 -- Name: voice_state; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE voice_state (
+CREATE TABLE public.voice_state (
     id integer NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     guild_id character varying(30) NOT NULL,
@@ -377,7 +299,7 @@ CREATE TABLE voice_state (
 -- Name: voice_state_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE voice_state_id_seq
+CREATE SEQUENCE public.voice_state_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -389,14 +311,14 @@ CREATE SEQUENCE voice_state_id_seq
 -- Name: voice_state_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE voice_state_id_seq OWNED BY voice_state.id;
+ALTER SEQUENCE public.voice_state_id_seq OWNED BY public.voice_state.id;
 
 
 --
 -- Name: vote; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE vote (
+CREATE TABLE public.vote (
     id integer NOT NULL,
     create_date timestamp with time zone DEFAULT now() NOT NULL,
     guild_id character varying(30) NOT NULL,
@@ -411,7 +333,7 @@ CREATE TABLE vote (
 -- Name: vote_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE vote_id_seq
+CREATE SEQUENCE public.vote_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -423,63 +345,63 @@ CREATE SEQUENCE vote_id_seq
 -- Name: vote_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE vote_id_seq OWNED BY vote.id;
+ALTER SEQUENCE public.vote_id_seq OWNED BY public.vote.id;
 
 
 --
 -- Name: discord_quote id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY discord_quote ALTER COLUMN id SET DEFAULT nextval('discord_quote_id_seq'::regclass);
+ALTER TABLE ONLY public.discord_quote ALTER COLUMN id SET DEFAULT nextval('public.discord_quote_id_seq'::regclass);
 
 
 --
 -- Name: own_username id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY own_username ALTER COLUMN id SET DEFAULT nextval('own_username_id_seq'::regclass);
+ALTER TABLE ONLY public.own_username ALTER COLUMN id SET DEFAULT nextval('public.own_username_id_seq'::regclass);
 
 
 --
 -- Name: reminder id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY reminder ALTER COLUMN id SET DEFAULT nextval('reminder_id_seq'::regclass);
+ALTER TABLE ONLY public.reminder ALTER COLUMN id SET DEFAULT nextval('public.reminder_id_seq'::regclass);
 
 
 --
 -- Name: shipment id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY shipment ALTER COLUMN id SET DEFAULT nextval('shipment_id_seq'::regclass);
+ALTER TABLE ONLY public.shipment ALTER COLUMN id SET DEFAULT nextval('public.shipment_id_seq'::regclass);
 
 
 --
 -- Name: user_presence id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY user_presence ALTER COLUMN id SET DEFAULT nextval('user_presence_id_seq'::regclass);
+ALTER TABLE ONLY public.user_presence ALTER COLUMN id SET DEFAULT nextval('public.user_presence_id_seq'::regclass);
 
 
 --
 -- Name: voice_state id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY voice_state ALTER COLUMN id SET DEFAULT nextval('voice_state_id_seq'::regclass);
+ALTER TABLE ONLY public.voice_state ALTER COLUMN id SET DEFAULT nextval('public.voice_state_id_seq'::regclass);
 
 
 --
 -- Name: vote id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY vote ALTER COLUMN id SET DEFAULT nextval('vote_id_seq'::regclass);
+ALTER TABLE ONLY public.vote ALTER COLUMN id SET DEFAULT nextval('public.vote_id_seq'::regclass);
 
 
 --
 -- Name: discord_quote discord_quote_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY discord_quote
+ALTER TABLE ONLY public.discord_quote
     ADD CONSTRAINT discord_quote_pkey PRIMARY KEY (id);
 
 
@@ -487,7 +409,7 @@ ALTER TABLE ONLY discord_quote
 -- Name: error_ip error_ip_error_id_ip_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY error_ip
+ALTER TABLE ONLY public.error_ip
     ADD CONSTRAINT error_ip_error_id_ip_key UNIQUE (error_id, ip);
 
 
@@ -495,7 +417,7 @@ ALTER TABLE ONLY error_ip
 -- Name: error error_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY error
+ALTER TABLE ONLY public.error
     ADD CONSTRAINT error_pkey PRIMARY KEY (id);
 
 
@@ -503,7 +425,7 @@ ALTER TABLE ONLY error
 -- Name: message message_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY message
+ALTER TABLE ONLY public.message
     ADD CONSTRAINT message_pkey PRIMARY KEY (id);
 
 
@@ -511,7 +433,7 @@ ALTER TABLE ONLY message
 -- Name: own_username own_username_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY own_username
+ALTER TABLE ONLY public.own_username
     ADD CONSTRAINT own_username_pkey PRIMARY KEY (id);
 
 
@@ -519,7 +441,7 @@ ALTER TABLE ONLY own_username
 -- Name: pee_log pee_log_create_date_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY pee_log
+ALTER TABLE ONLY public.pee_log
     ADD CONSTRAINT pee_log_create_date_user_id_key UNIQUE (create_date, user_id);
 
 
@@ -527,7 +449,7 @@ ALTER TABLE ONLY pee_log
 -- Name: reminder reminder_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY reminder
+ALTER TABLE ONLY public.reminder
     ADD CONSTRAINT reminder_pkey PRIMARY KEY (id);
 
 
@@ -535,7 +457,7 @@ ALTER TABLE ONLY reminder
 -- Name: shipment shipment_carrier_tracking_number_author_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY shipment
+ALTER TABLE ONLY public.shipment
     ADD CONSTRAINT shipment_carrier_tracking_number_author_id_key UNIQUE (carrier, tracking_number, author_id);
 
 
@@ -543,7 +465,7 @@ ALTER TABLE ONLY shipment
 -- Name: shipment shipment_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY shipment
+ALTER TABLE ONLY public.shipment
     ADD CONSTRAINT shipment_pkey PRIMARY KEY (id);
 
 
@@ -551,7 +473,7 @@ ALTER TABLE ONLY shipment
 -- Name: user_karma user_karma_guild_id_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY user_karma
+ALTER TABLE ONLY public.user_karma
     ADD CONSTRAINT user_karma_guild_id_user_id_key UNIQUE (guild_id, user_id);
 
 
@@ -559,7 +481,7 @@ ALTER TABLE ONLY user_karma
 -- Name: user_money user_money_guild_id_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY user_money
+ALTER TABLE ONLY public.user_money
     ADD CONSTRAINT user_money_guild_id_user_id_key UNIQUE (guild_id, user_id);
 
 
@@ -567,7 +489,7 @@ ALTER TABLE ONLY user_money
 -- Name: user_presence user_presence_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY user_presence
+ALTER TABLE ONLY public.user_presence
     ADD CONSTRAINT user_presence_pkey PRIMARY KEY (id);
 
 
@@ -575,7 +497,7 @@ ALTER TABLE ONLY user_presence
 -- Name: voice_state voice_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY voice_state
+ALTER TABLE ONLY public.voice_state
     ADD CONSTRAINT voice_state_pkey PRIMARY KEY (id);
 
 
@@ -583,31 +505,206 @@ ALTER TABLE ONLY voice_state
 -- Name: vote vote_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY vote
+ALTER TABLE ONLY public.vote
     ADD CONSTRAINT vote_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_author_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX message_author_id_idx ON public.message USING btree (author_id);
+
+
+--
+-- Name: message_chan_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX message_chan_id_idx ON public.message USING btree (chan_id);
+
+
+--
+-- Name: user_presence_guild_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_presence_guild_id_idx ON public.user_presence USING btree (guild_id);
+
+
+--
+-- Name: user_presence_user_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_presence_user_id_idx ON public.user_presence USING btree (user_id);
 
 
 --
 -- Name: message message_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER message_update BEFORE UPDATE ON message FOR EACH ROW EXECUTE PROCEDURE on_record_update();
+CREATE TRIGGER message_update BEFORE UPDATE ON public.message FOR EACH ROW EXECUTE FUNCTION public.on_record_update();
 
 
 --
 -- Name: error_ip error_ip_error_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY error_ip
-    ADD CONSTRAINT error_ip_error_id_fkey FOREIGN KEY (error_id) REFERENCES error(id);
+ALTER TABLE ONLY public.error_ip
+    ADD CONSTRAINT error_ip_error_id_fkey FOREIGN KEY (error_id) REFERENCES public.error(id);
 
 
 --
 -- Name: vote vote_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY vote
-    ADD CONSTRAINT vote_message_id_fkey FOREIGN KEY (message_id) REFERENCES message(id);
+ALTER TABLE ONLY public.vote
+    ADD CONSTRAINT vote_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.message(id);
+
+
+--
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: -
+--
+
+GRANT USAGE ON SCHEMA public TO disgo;
+
+
+--
+-- Name: TABLE discord_quote; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.discord_quote TO disgo;
+
+
+--
+-- Name: SEQUENCE discord_quote_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.discord_quote_id_seq TO disgo;
+
+
+--
+-- Name: TABLE error; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.error TO disgo;
+
+
+--
+-- Name: TABLE error_ip; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.error_ip TO disgo;
+
+
+--
+-- Name: TABLE message; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.message TO disgo;
+
+
+--
+-- Name: TABLE own_username; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.own_username TO disgo;
+
+
+--
+-- Name: SEQUENCE own_username_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.own_username_id_seq TO disgo;
+
+
+--
+-- Name: TABLE pee_log; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.pee_log TO disgo;
+
+
+--
+-- Name: TABLE reminder; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.reminder TO disgo;
+
+
+--
+-- Name: SEQUENCE reminder_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.reminder_id_seq TO disgo;
+
+
+--
+-- Name: TABLE shipment; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.shipment TO disgo;
+
+
+--
+-- Name: SEQUENCE shipment_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.shipment_id_seq TO disgo;
+
+
+--
+-- Name: TABLE user_karma; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.user_karma TO disgo;
+
+
+--
+-- Name: TABLE user_money; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.user_money TO disgo;
+
+
+--
+-- Name: TABLE user_presence; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.user_presence TO disgo;
+
+
+--
+-- Name: SEQUENCE user_presence_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.user_presence_id_seq TO disgo;
+
+
+--
+-- Name: TABLE voice_state; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.voice_state TO disgo;
+
+
+--
+-- Name: SEQUENCE voice_state_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.voice_state_id_seq TO disgo;
+
+
+--
+-- Name: TABLE vote; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.vote TO disgo;
+
+
+--
+-- Name: SEQUENCE vote_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.vote_id_seq TO disgo;
 
 
 --
