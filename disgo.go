@@ -4347,6 +4347,11 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 			}
 		}
 	}
+	if len(gameName) > 0 {
+		if user, err := s.User(p.User.ID); err == nil && user.Bot {
+			gameName = ""
+		}
+	}
 	/*user, err := s.User(p.User.ID)
 	if err != nil {
 		fmt.Println("ERROR getting user")
@@ -4714,6 +4719,11 @@ func main() {
 							gameName = strings.TrimSpace(g.Name)
 							break
 						}
+					}
+				}
+				if len(gameName) > 0 {
+					if user, err := client.User(presence.User.ID); err == nil && user.Bot {
+						gameName = ""
 					}
 				}
 				userID, err := strconv.ParseUint(presence.User.ID, 10, 64)
