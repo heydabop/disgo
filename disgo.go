@@ -4203,7 +4203,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		}
 		if blocked, found := guildReactBlacklist[channel.GuildID]; !found || !blocked {
 			if match := botRegex.FindString(m.Content); match != "" {
-				if rand.Intn(4) == 0 {
+				if rand.Intn(8) == 0 {
 					go func() {
 						s.MessageReactionAdd(m.ChannelID, m.ID, "🤖")
 						s.MessageReactionAdd(m.ChannelID, m.ID, "👋")
