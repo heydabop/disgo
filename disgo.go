@@ -88,6 +88,7 @@ var (
 	currentGame                               string
 	currentVoiceSessions                      = make(map[string]*discordgo.VoiceConnection)
 	currentVoiceChans                         = make(map[string]chan bool)
+	diceRegex                                 = regexp.MustCompile(`(?i)(\d+)\s*d\s*(\d+)`)
 	gamelist                                  []string
 	lastKappa                                 = make(map[string]time.Time)
 	lastMessagesByAuthor, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
@@ -651,25 +652,17 @@ func roll(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	one := big.NewInt(1)
 	dice := uint64(1)
 	if len(args) < 1 {
-		max.SetInt64(6)
+		max.SetInt64(100)
 	} else {
-		var success bool
-		_, success = max.SetString(args[0], 10)
-		if !success {
-			return "", fmt.Errorf(`Unable to parse "%s"`, args[0])
-		}
-		if max.Cmp(one) < 0 {
-			return "", errors.New("Max roll must be more than 0")
-		}
-	}
-	if len(args) > 1 {
-		var err error
-		dice, err = strconv.ParseUint(args[1], 10, 64)
-		if err != nil {
-			return "", err
-		}
-		if dice <= 0 {
-			return "", errors.New("Number of dice must be more than 0")
+		if match := diceRegex.FindStringSubmatch(strings.Join(args, " ")); match != nil {
+			var err error
+			dice, err = strconv.ParseUint(match[1], 10, 64)
+			if err != nil {
+				return "", err
+			}
+			if _, success := max.SetString(match[2], 10); !success {
+				return "", fmt.Errorf(`Unable to parse "%s"`, match[2])
+			}
 		}
 	}
 	rolls := make([]string, dice)
@@ -3883,7 +3876,7 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	in [duration] to [x] - mentions user with <x> after <duration> (example: /remindme in 5 hours 10 minutes 3 seconds to order a pizza)
 	at [time] to [x] - mentions user with <x> at <time> (example: /remindme at 2016-05-04 13:37:00 -0500 to make a clever xd facebook status)
 **rename** [new username] - renames bot
-**roll** [sides (optional)] [number (optional)] - "rolls" <number> dice with <sides> sides`)
+**roll** [x]d[y] - "rolls" <x> dice with <y> sides, or rolls 1-100 if no dice are specified`)
 	if err != nil {
 		return "", err
 	}
