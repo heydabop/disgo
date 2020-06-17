@@ -88,7 +88,7 @@ var (
 	currentGame                               string
 	currentVoiceSessions                      = make(map[string]*discordgo.VoiceConnection)
 	currentVoiceChans                         = make(map[string]chan bool)
-	diceRegex                                 = regexp.MustCompile(`(?i)(\d+)\s*d\s*(\d+)`)
+	diceRegex                                 = regexp.MustCompile(`(?i)(\d+)\s*d\s*(\d+)(?:\s*([+-])\s*(\d+))?`)
 	gamelist                                  []string
 	lastKappa                                 = make(map[string]time.Time)
 	lastMessagesByAuthor, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
@@ -651,6 +651,7 @@ func roll(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	var max big.Int
 	one := big.NewInt(1)
 	dice := uint64(1)
+	addend := int64(0)
 	if len(args) < 1 {
 		max.SetInt64(100)
 	} else {
@@ -663,16 +664,36 @@ func roll(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			if _, success := max.SetString(match[2], 10); !success {
 				return "", fmt.Errorf(`Unable to parse "%s"`, match[2])
 			}
+			if len(match) == 5 && match[4] != "" {
+				if addend, err = strconv.ParseInt(match[4], 10, 64); err != nil {
+					return "", err
+				}
+				if match[3] == "-" {
+					addend = 0 - addend
+				}
+			}
 		}
 	}
 	rolls := make([]string, dice)
 	var result big.Int
+	total := big.NewInt(0)
 	for i := uint64(0); i < dice; i++ {
 		result.Rand(rand.New(rand.NewSource(time.Now().UnixNano())), &max)
 		result.Add(&result, one)
+		total.Add(total, &result)
 		rolls[i] = result.Text(10)
 	}
-	return fmt.Sprintf(strings.Join(rolls, " ")), nil
+	total.Add(total, big.NewInt(addend))
+	var message = strings.Join(rolls, " ")
+	if dice > 1 || addend != 0 {
+		if addend > 0 {
+			message += fmt.Sprintf(" + %d", addend)
+		} else if addend < 0 {
+			message += fmt.Sprintf(" - %d", 0-addend)
+		}
+		message += fmt.Sprintf(" = %s", total.Text(10))
+	}
+	return message, nil
 }
 
 func uptime(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
