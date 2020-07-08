@@ -88,7 +88,7 @@ var (
 	currentGame                               string
 	currentVoiceSessions                      = make(map[string]*discordgo.VoiceConnection)
 	currentVoiceChans                         = make(map[string]chan bool)
-	diceRegex                                 = regexp.MustCompile(`(?i)(\d+)\s*d\s*(\d+)(?:\s*([+-])\s*(\d+))?`)
+	diceRegex                                 = regexp.MustCompile(`(?i)(?:(\d+)\s*d\s*)?(\d+)(?:\s*([+-])\s*(\d+))?`)
 	gamelist                                  []string
 	lastKappa                                 = make(map[string]time.Time)
 	lastMessagesByAuthor, lastCommandMessages = make(map[string]discordgo.Message), make(map[string]discordgo.Message)
@@ -657,9 +657,11 @@ func roll(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	} else {
 		if match := diceRegex.FindStringSubmatch(strings.Join(args, " ")); match != nil {
 			var err error
-			dice, err = strconv.ParseUint(match[1], 10, 64)
-			if err != nil {
-				return "", err
+			if len(match[1]) > 0 {
+				dice, err = strconv.ParseUint(match[1], 10, 64)
+				if err != nil {
+					return "", err
+				}
 			}
 			if _, success := max.SetString(match[2], 10); !success {
 				return "", fmt.Errorf(`Unable to parse "%s"`, match[2])
