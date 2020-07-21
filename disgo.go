@@ -3957,6 +3957,19 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 	lastKappa[authorID] = time.Now()
 }
 
+func speedtest(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	if authorID != adminID {
+		return "", nil
+	}
+
+	cmd := exec.Command("speedtest", "--simple")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("```%s```", out), nil
+}
+
 func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	commandRegex := regexp.MustCompile(`^\/(.+)`)
 	upvoteRegex := regexp.MustCompile(`(<@!?\d+?>)\s*\+\+`)
@@ -4080,6 +4093,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"eutime":         commandFunc(euTime),
 		"ustime":         commandFunc(realTime),
 		"natime":         commandFunc(realTime),
+		"speedtest":      commandFunc(speedtest),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
 
