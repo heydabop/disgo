@@ -34,6 +34,8 @@ import (
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
+	"github.com/heydabop/disgo/climacell"
+	"github.com/heydabop/disgo/darksky"
 	"github.com/heydabop/disgo/google"
 	"github.com/heydabop/disgo/hangman"
 	"github.com/heydabop/disgo/markov"
@@ -3807,42 +3809,38 @@ func weather(sesseion *discordgo.Session, guildID, chanID, authorID, messageID s
 		}
 		lat, lng = point.Lat, point.Lng
 	}
-	res, err := http.Get(fmt.Sprintf("https://api.darksky.net/forecast/%s/%f,%f?exclude=minutely,daily,alerts,flags&units=us&lang=en", darkSkySecret, lat, lng))
+	response, err := darksky.GetCurrent(lat, lng, darkSkySecret)
 	if err != nil {
 		return "", err
 	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		return "", errors.New(res.Status)
-	}
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var response struct {
-		Currently struct {
-			Summary             string  `json:"summary"`
-			Temperature         float64 `json:"temperature"`
-			ApparentTemperature float64 `json:"apparentTemperature"`
-			DewPoint            float64 `json:"dewPoint"`
-			Humidity            float64 `json:"humidity"`
-			WindSpeed           float64 `json:"windSpeed"`
-			WindGust            float64 `json:"windGust"`
-			WindBearing         int     `json:"windBearing"`
-			UvIndex             int     `json:"uvIndex"`
-		} `json:"currently"`
-		Hourly struct {
-			Summary string `json:"summary"`
-		} `json:"hourly"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return "", err
+	aqi, err := climacell.GetAQI(lat, lng, climaCellKey)
+	var aqiStr string
+	if err == nil {
+		var health string
+		if aqi < 51 {
+			health = "Good"
+		} else if aqi < 101 {
+			health = "Moderate"
+		} else if aqi < 151 {
+			health = "Unhealthy for sensitive groups"
+		} else if aqi < 201 {
+			health = "Unhealthy"
+		} else if aqi < 301 {
+			health = "Very Unhealthy"
+		} else {
+			health = "Hazardous"
+		}
+		aqiStr = fmt.Sprintf("%d (%s)", aqi, health)
+	} else {
+		aqiStr = "--"
+		fmt.Printf("Error getting ClimaCell AQI: %s", err)
 	}
 	return fmt.Sprintf(`temperature | %.0f °F (feels like %.0f °F)
 conditions | %s
 relative humidity | %.0f%% (dew point: %.0f °F)
 wind | %.1f mph from %d° (gusts: %.1f mph)
 uv index | %d
+air quality index | %s
 forecast | %s`,
 		response.Currently.Temperature,
 		response.Currently.ApparentTemperature,
@@ -3853,6 +3851,7 @@ forecast | %s`,
 		response.Currently.WindBearing,
 		response.Currently.WindGust,
 		response.Currently.UvIndex,
+		aqiStr,
 		strings.ToLower(strings.Trim(response.Hourly.Summary, "."))), nil
 }
 
