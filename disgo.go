@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"image"
 	imageColor "image/color"
-	_ "image/gif"
+	"image/gif"
 	"image/jpeg"
 	"image/png"
 	"io/ioutil"
@@ -142,7 +142,7 @@ func timeSinceStr(timeSince time.Duration) string {
 }
 
 func getUsername(session *discordgo.Session, userID, guildID string) (string, error) {
-	member, err := session.State.Member(guildID, userID)
+	member, err := session.GuildMember(guildID, userID)
 	if err == nil {
 		if len(member.Nick) > 0 {
 			return member.Nick, nil
@@ -166,10 +166,8 @@ func getUsername(session *discordgo.Session, userID, guildID string) (string, er
 				fmt.Println(jErr.Error())
 				return "", nil
 			}
-			if dErr.Code == 10013 {
-				return "`<UNKNOWN>`", nil
-			}
 		}
+		return "`<UNKNOWN>`", nil
 	}
 	return user.Username, nil
 }
@@ -222,12 +220,17 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (stringFloatPairs, time.Tim
 	gameTime := make(map[string]float64)
 	firstTime := time.Now()
 	for rows.Next() {
-		var userID, game string
+		var userID, game, presence string
 		var currTime time.Time
-		err := rows.Scan(&userID, &currTime, &game)
+		err := rows.Scan(&userID, &currTime, &game, &presence)
 		if err != nil {
 			return make(stringFloatPairs, 0), time.Now(), 0, 0, err
 		}
+		fmt.Println(presence, len(game))
+		if presence == "offline" {
+			game = ""
+		}
+		fmt.Println(presence, len(game))
 
 		if currTime.Before(firstTime) {
 			firstTime = currTime
@@ -504,6 +507,10 @@ func vote(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		}
 		voteTime[authorID] = time.Now()
 		return "No.", nil
+	}
+
+	if (authorID == "274773965166084107" && userID == "98468637962158080") || (userID == "274773965166084107" && authorID == "98468637962158080") {
+		return "", nil
 	}
 
 	var lastVoterIDAgainstUser string
@@ -1291,7 +1298,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			}
 			continue
 		}
-		suh := rand.Intn(69)
+		suh := rand.Intn(72)
 		currentVoiceChans[guildID] = make(chan bool)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
@@ -1797,12 +1804,12 @@ func playtime(session *discordgo.Session, guildID, chanID, authorID, messageID s
 			if err != nil {
 				return "", err
 			}
-			rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id = $2 ORDER BY create_date ASC`, guildIDint, userIDint)
+			rows, err = sqlClient.Query(`SELECT user_id, create_date, game, presence FROM user_presence WHERE guild_id = $1 AND user_id = $2 ORDER BY create_date ASC`, guildIDint, userIDint)
 		}
 	}
 	if rows == nil {
 		var err error
-		rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id != $2 AND user_id != $3 ORDER BY create_date ASC`, guildIDint, ownUserIDint, musicBotID)
+		rows, err = sqlClient.Query(`SELECT user_id, create_date, game, presence FROM user_presence WHERE guild_id = $1 AND user_id != $2 AND user_id != $3 ORDER BY create_date ASC`, guildIDint, ownUserIDint, musicBotID)
 		if err != nil {
 			return "", err
 		}
@@ -1905,11 +1912,11 @@ func recentPlaytime(session *discordgo.Session, guildID, chanID, authorID, messa
 			if err != nil {
 				return "", err
 			}
-			rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND create_date > $3 ORDER BY create_date ASC`, guildIDint, userIDint, startTime)
+			rows, err = sqlClient.Query(`SELECT user_id, create_date, game, presence FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND create_date > $3 ORDER BY create_date ASC`, guildIDint, userIDint, startTime)
 		}
 	}
 	if rows == nil {
-		rows, err = sqlClient.Query(`SELECT user_id, create_date, game FROM user_presence WHERE guild_id = $1 AND user_id != $2 AND user_id != $3 AND create_date > $4 ORDER BY create_date ASC`, guildIDint, ownUserIDint, musicBotID, startTime)
+		rows, err = sqlClient.Query(`SELECT user_id, create_date, game, presence FROM user_presence WHERE guild_id = $1 AND user_id != $2 AND user_id != $3 AND create_date > $4 ORDER BY create_date ASC`, guildIDint, ownUserIDint, musicBotID, startTime)
 	}
 	if err != nil {
 		return "", err
@@ -3244,12 +3251,67 @@ func jpg(session *discordgo.Session, guildID, chanID, authorID, messageID string
 		}
 		linkedImage = resize.Thumbnail(400, 400, linkedImage, resize.Bilinear)
 		jpgImage := new(bytes.Buffer)
-		options := jpeg.Options{Quality: 0}
+		options := jpeg.Options{Quality: 1}
 		if err = jpeg.Encode(jpgImage, linkedImage, &options); err != nil {
 			return "", err
 		}
 
 		if _, err = session.ChannelFileSend(chanID, "jpeg.jpg", jpgImage); err != nil {
+			return "", err
+		}
+		return "", nil
+	}
+	return "I was unable to find a recently embedded image", nil
+}
+
+func giffy(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+	messages, err := session.ChannelMessages(chanID, 50, messageID, "", "")
+	if err != nil {
+		return "", nil
+	}
+	for _, message := range messages {
+		var URL string
+		if message.Attachments != nil && len(message.Attachments) > 0 {
+			attachmentURL := message.Attachments[0].URL
+			lastIndex := strings.LastIndex(attachmentURL, ".")
+			if lastIndex == -1 || lastIndex == len(attachmentURL)-1 {
+				continue
+			}
+			ext := strings.ToLower(attachmentURL[lastIndex+1:])
+			if ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "gif" {
+				URL = attachmentURL
+			}
+		}
+		if len(URL) < 1 {
+			urlRegex := regexp.MustCompile(`(?i)https?:\/\/.+\.(?:jpg|png|jpeg|gif)`)
+			if urlRegex.MatchString(message.Content) {
+				URL = message.Content
+			}
+		}
+		if len(URL) < 1 {
+			continue
+		}
+		res, err := http.Get(URL)
+		if err != nil {
+			return "", err
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			return "", errors.New(res.Status)
+		}
+
+		linkedImage, _, err := image.Decode(res.Body)
+		if err != nil {
+			return "", err
+		}
+		linkedImage = resize.Thumbnail(400, 400, linkedImage, resize.Bilinear)
+		gifImage := new(bytes.Buffer)
+		options := gif.Options{NumColors: 128}
+		if err = gif.Encode(gifImage, linkedImage, &options); err != nil {
+			return "", err
+		}
+
+		if _, err = session.ChannelFileSend(chanID, "gif.gif", gifImage); err != nil {
 			return "", err
 		}
 		return "", nil
@@ -3553,7 +3615,7 @@ func grad(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	return fmt.Sprintf("%.0f days until May 17, 2019", days), nil
 }
 
-func bourtney(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
+func courtney(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	sinceStart := time.Since(time.Date(2018, 5, 14, 8, 0, 0, 0, time.Local))
 	untilEnd := time.Until(time.Date(2058, 10, 2, 17, 0, 0, 0, time.Local))
 	return fmt.Sprintf("%.4f%% of the way to retirement", (sinceStart.Minutes()/untilEnd.Minutes())*100), nil
@@ -3875,7 +3937,8 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 **@[user]--** - downvotes user
 **forsen** - alias for /spam forsenlol
 **fortune** - get a "fortune"
-**gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel`)
+**gameactivity** [game (optional)] - shows played hours per hour of <game> (or all games if none provided) over lifetime of channel
+**gif** - looks for an embedded or linked image in the last 10 messages and reuploads it with modern GIF® compression`)
 	if err != nil {
 		return "", err
 	}
@@ -4059,6 +4122,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"servers":        commandFunc(totalServers),
 		"source":         commandFunc(source),
 		"jpg":            commandFunc(jpg),
+		"gif":            commandFunc(giffy),
 		"ascii":          commandFunc(ascii),
 		"ignore":         commandFunc(ignore),
 		"mute":           commandFunc(mute),
@@ -4070,7 +4134,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"army":           commandFunc(army),
 		"willgrad":       commandFunc(willGrad),
 		"grad":           commandFunc(grad),
-		"bourtney":       commandFunc(bourtney),
+		"courtney":       commandFunc(courtney),
 		"ross":           commandFunc(ross),
 		"christmas":      commandFunc(christmas),
 		"hangman":        commandFunc(hangmanCmd),
@@ -4388,6 +4452,9 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	} else {
 		fmt.Printf("%20s %20s %20s : %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
 	}*/
+	if gameName == "Hello Kitty: Island Adventure" {
+		gameName = ""
+	}
 	guildID, err := strconv.ParseUint(p.GuildID, 10, 64)
 	if err != nil {
 		fmt.Println("ERROR parsing guild ID " + err.Error())
