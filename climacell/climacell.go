@@ -2,7 +2,6 @@ package climacell
 
 import (
 	"encoding/json"
-	"math"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -10,14 +9,21 @@ import (
 )
 
 type aqiResponse struct {
-	EpaAqi struct {
-		Value float64 `json:"value"`
-	} `json:"epa_aqi"`
+	Data struct {
+		Timelines []struct {
+			Timestep string `json:"timestep"`
+			Intervals []struct {
+				Values struct {
+					EpaIndex uint64 `json:"epaIndex"`
+				} `json:"values"`
+			} `json:"intervals"`
+		} `json:"timelines"`
+	} `json:"data"`
 }
 
 //GetAQI returns the current EPA AQI for lat,lng
 func GetAQI(lat, lng float64, apiKey string) (uint64, error) {
-	res, err := http.Get(fmt.Sprintf("https://api.climacell.co/v3/weather/realtime?lat=%f&lon=%f&unit_system=si&fields=epa_aqi&apikey=%s", lat, lng, apiKey))
+	res, err := http.Get(fmt.Sprintf("https://api.tomorrow.io/v4/timelines?location=%f,%f&timesteps=current&fields=epaIndex&apikey=%s", lat, lng, apiKey))
 	if err != nil {
 		return 0, err
 	}
@@ -33,5 +39,8 @@ func GetAQI(lat, lng float64, apiKey string) (uint64, error) {
 	if err := json.Unmarshal(body, &response); err != nil {
 		return 0, err
 	}
-	return uint64(math.Round(response.EpaAqi.Value)), nil
+	if len(response.Data.Timelines) == 1 && len(response.Data.Timelines[0].Intervals) == 1 && response.Data.Timelines[0].Timestep == "current" {
+		return response.Data.Timelines[0].Intervals[0].Values.EpaIndex, nil
+	}
+	return 0, errors.New("Response missing AQI")
 }
