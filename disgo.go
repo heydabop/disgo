@@ -2762,21 +2762,16 @@ func lastPlayed(session *discordgo.Session, guildID, chanID, authorID, messageID
 	if err != nil {
 		return "", err
 	}
-	var games []*discordgo.Game
+	var games []*discordgo.Activity
 	for _, presence := range guild.Presences {
 		if presence.User != nil && presence.User.ID == userID {
-			if presence.Game != nil {
-				games = []*discordgo.Game{presence.Game}
-			}
-			if presence.Activities != nil {
-				games = append(games, presence.Activities...)
-			}
+			games = presence.Activities
 			break
 		}
 	}
 	if games != nil {
 		for _, g := range games {
-			if g.Type == discordgo.GameTypeGame {
+			if g.Type == discordgo.ActivityTypeGame {
 				return fmt.Sprintf("%s is currently playing %s", username, g.Name), nil
 			}
 		}
@@ -2868,7 +2863,7 @@ func voicekick(session *discordgo.Session, guildID, chanID, authorID, messageID 
 		return "", err
 	}
 	for _, userID := range userIDs {
-		err = session.GuildMemberMove(newChan.GuildID, userID, newChan.ID)
+		err = session.GuildMemberMove(newChan.GuildID, userID, &newChan.ID)
 		if err != nil {
 			fmt.Println("ERROR in voicekick", err)
 		}
@@ -2921,8 +2916,9 @@ func timeout(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	}
 
 	now := time.Now()
+	timeout := timeoutChanID
 	for _, userID := range userIDs {
-		err = session.GuildMemberMove(timeoutGuildID, userID, timeoutChanID)
+		err = session.GuildMemberMove(timeoutGuildID, userID, &timeout)
 		if err != nil {
 			fmt.Println("ERROR in timeout", err)
 		}
@@ -3683,7 +3679,7 @@ func playing(session *discordgo.Session, guildID, chanID, authorID, messageID st
 	if authorID != adminID || len(args) < 1 {
 		return "", nil
 	}
-	if err := session.UpdateStatus(0, strings.Join(args[0:], " ")); err != nil {
+	if err := session.UpdateGameStatus(0, strings.Join(args[0:], " ")); err != nil {
 		return "", err
 	}
 	return "", nil
@@ -4406,7 +4402,7 @@ func updateGame(s *discordgo.Session) {
 		fmt.Println("Error getting user guilds", err.Error())
 	}
 
-	if err := s.UpdateStatus(0, currentGame); err != nil {
+	if err := s.UpdateGameStatus(0, currentGame); err != nil {
 		fmt.Println("ERROR updating game: ", err.Error())
 	}
 	for _, guild := range userGuilds {
@@ -4430,11 +4426,9 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 		return
 	}
 	gameName := ""
-	if p.Game != nil && p.Game.Type == discordgo.GameTypeGame {
-		gameName = strings.TrimSpace(p.Game.Name)
-	} else if p.Activities != nil {
+	if p.Activities != nil {
 		for _, g := range p.Activities {
-			if g.Type == discordgo.GameTypeGame {
+			if g.Type == discordgo.ActivityTypeGame {
 				gameName = strings.TrimSpace(g.Name)
 				break
 			}
@@ -4491,7 +4485,8 @@ func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 	}
 	if timeoutTime, found := timeoutedUserIDs[v.UserID]; found {
 		if v.ChannelID != timeoutChanID && v.GuildID == timeoutGuildID && timeoutTime.Add(30*time.Second).After(time.Now()) {
-			s.GuildMemberMove(timeoutGuildID, v.UserID, timeoutChanID)
+			timeout := timeoutChanID
+			s.GuildMemberMove(timeoutGuildID, v.UserID, &timeout)
 		}
 	}
 }
@@ -4807,11 +4802,9 @@ func main() {
 			userMap := make(map[string]bool)
 			for _, presence := range guild.Presences {
 				gameName := ""
-				if presence.Game != nil && presence.Game.Type == discordgo.GameTypeGame {
-					gameName = strings.TrimSpace(presence.Game.Name)
-				} else if presence.Activities != nil {
+				if presence.Activities != nil {
 					for _, g := range presence.Activities {
-						if g.Type == discordgo.GameTypeGame {
+						if g.Type == discordgo.ActivityTypeGame {
 							gameName = strings.TrimSpace(g.Name)
 							break
 						}
