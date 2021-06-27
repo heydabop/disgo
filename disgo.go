@@ -1298,7 +1298,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 			}
 			continue
 		}
-		suh := rand.Intn(72)
+		suh := rand.Intn(76)
 		currentVoiceChans[guildID] = make(chan bool)
 		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
 		break
@@ -3617,13 +3617,13 @@ func grad(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 
 func courtney(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	sinceStart := time.Since(time.Date(2018, 5, 14, 8, 0, 0, 0, time.Local))
-	untilEnd := time.Until(time.Date(2058, 10, 2, 17, 0, 0, 0, time.Local))
+	untilEnd := time.Until(time.Date(2051, 4, 11, 17, 0, 0, 0, time.Local))
 	return fmt.Sprintf("%.4f%% of the way to retirement", (sinceStart.Minutes()/untilEnd.Minutes())*100), nil
 }
 
 func ross(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	sinceStart := time.Since(time.Date(2016, 1, 11, 9, 30, 0, 0, time.Local))
-	untilEnd := time.Until(time.Date(2053, 2, 28, 16, 0, 0, 0, time.Local))
+	untilEnd := time.Until(time.Date(2048, 2, 28, 16, 0, 0, 0, time.Local))
 	return fmt.Sprintf("%.4f%% of the way to retirement", (sinceStart.Minutes()/untilEnd.Minutes())*100), nil
 }
 
