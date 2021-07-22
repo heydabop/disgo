@@ -4740,6 +4740,17 @@ func main() {
 		fmt.Println(err)
 		return
 	}
+	client.Identify.Intents =
+		discordgo.IntentsGuilds |
+		discordgo.IntentsGuildMembers |
+		discordgo.IntentsGuildVoiceStates |
+		discordgo.IntentsGuildPresences |
+		discordgo.IntentsGuildMessages |
+		discordgo.IntentsGuildMessageReactions |
+		discordgo.IntentsGuildMessageTyping |
+		discordgo.IntentsDirectMessages |
+		discordgo.IntentsDirectMessageReactions |
+		discordgo.IntentsDirectMessageTyping
 	client.StateEnabled = true
 
 	self, err := client.User("@me")
