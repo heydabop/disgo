@@ -226,11 +226,9 @@ func getGameTimesFromRows(rows *sql.Rows, limit int) (stringFloatPairs, time.Tim
 		if err != nil {
 			return make(stringFloatPairs, 0), time.Now(), 0, 0, err
 		}
-		fmt.Println(presence, len(game))
 		if presence == "offline" {
 			game = ""
 		}
-		fmt.Println(presence, len(game))
 
 		if currTime.Before(firstTime) {
 			firstTime = currTime
