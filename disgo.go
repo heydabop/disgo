@@ -4392,7 +4392,7 @@ func updateGame(s *discordgo.Session) {
 		if index >= len(gamelist) {
 			currentGame = ""
 		} else {
-			currentGame = strings.TrimSpace(gamelist[index])
+			currentGame = strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(gamelist[index]), "®", ""), "™", "")
 		}
 	}
 	userGuilds, err := s.UserGuilds(100, "", "")
@@ -4427,7 +4427,7 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	if p.Activities != nil {
 		for _, g := range p.Activities {
 			if g.Type == discordgo.ActivityTypeGame {
-				gameName = strings.TrimSpace(g.Name)
+				gameName = strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(g.Name), "®", ""), "™", "")
 				break
 			}
 		}
@@ -4740,15 +4740,15 @@ func main() {
 	}
 	client.Identify.Intents =
 		discordgo.IntentsGuilds |
-		discordgo.IntentsGuildMembers |
-		discordgo.IntentsGuildVoiceStates |
-		discordgo.IntentsGuildPresences |
-		discordgo.IntentsGuildMessages |
-		discordgo.IntentsGuildMessageReactions |
-		discordgo.IntentsGuildMessageTyping |
-		discordgo.IntentsDirectMessages |
-		discordgo.IntentsDirectMessageReactions |
-		discordgo.IntentsDirectMessageTyping
+			discordgo.IntentsGuildMembers |
+			discordgo.IntentsGuildVoiceStates |
+			discordgo.IntentsGuildPresences |
+			discordgo.IntentsGuildMessages |
+			discordgo.IntentsGuildMessageReactions |
+			discordgo.IntentsGuildMessageTyping |
+			discordgo.IntentsDirectMessages |
+			discordgo.IntentsDirectMessageReactions |
+			discordgo.IntentsDirectMessageTyping
 	client.StateEnabled = true
 
 	self, err := client.User("@me")
@@ -4814,7 +4814,7 @@ func main() {
 				if presence.Activities != nil {
 					for _, g := range presence.Activities {
 						if g.Type == discordgo.ActivityTypeGame {
-							gameName = strings.TrimSpace(g.Name)
+							gameName = strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(g.Name), "®", ""), "™", "")
 							break
 						}
 					}
