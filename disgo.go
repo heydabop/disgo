@@ -4018,7 +4018,7 @@ func speedtest(session *discordgo.Session, guildID, chanID, authorID, messageID 
 		return "", nil
 	}
 
-	cmd := exec.Command("speedtest", "--simple")
+	cmd := exec.Command("speedtest-cli", "--simple")
 	out, err := cmd.Output()
 	if err != nil {
 		return "", err
