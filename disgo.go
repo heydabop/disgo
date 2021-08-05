@@ -4033,7 +4033,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	twitchRegex := regexp.MustCompile(`(?i)https?:\/\/(www\.)?twitch.tv\/(\w+)`)
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
 	botRegex := regexp.MustCompile(`(?i)(^|\s)(bot|robot)($|\s)`)
-	questionRegex := regexp.MustCompile(`^<@!` + ownUserID + `>.*\w+.*\?$`)
+	questionRegex := regexp.MustCompile(`^<@!?` + ownUserID + `>.*\w+.*\?$`)
 	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
 	//greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*([^:].+)$`)
