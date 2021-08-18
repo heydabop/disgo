@@ -4233,17 +4233,20 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			fmt.Println(err.Error())
 		}
 
+		if m.Author.ID == ownUserID {
+			return
+		}
+
 		channel, err := s.State.Channel(m.ChannelID)
 		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "⚠ `"+err.Error()+"`")
-			fmt.Println("ERROR: " + err.Error())
-			return
+			if channel, err = s.Channel(m.ChannelID); err != nil {
+				s.ChannelMessageSend(m.ChannelID, "⚠ `"+err.Error()+"`")
+				fmt.Println("ERROR: " + err.Error())
+				return
+			}
 		}
 		if mutedUntil, found := mutedUserIDs[[2]string{channel.GuildID, m.Author.ID}]; found && mutedUntil.After(time.Now()) {
 			s.ChannelMessageDelete(m.ChannelID, m.ID)
-			return
-		}
-		if m.Author.ID == ownUserID {
 			return
 		}
 

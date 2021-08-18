@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/bwmarrin/dgvoice v0.0.0-20210225172318-caaac756e02e
-	github.com/bwmarrin/discordgo v0.23.2
+	github.com/bwmarrin/discordgo v0.23.1
 	github.com/gyuho/goling v0.0.0-20171001060826-315982eabee9
 	github.com/lib/pq v1.10.2
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
