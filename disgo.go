@@ -1,5 +1,7 @@
 package main
 
+//lint:file-ignore ST1005 Error strings can be capitalizaed, they're displayed to users
+
 import (
 	"bufio"
 	"bytes"
@@ -111,7 +113,6 @@ var (
 	startTime                                 = time.Now()
 	sqlClient                                 *sql.DB
 	timeoutedUserIDs                          = make(map[string]time.Time)
-	typingTimer                               = make(map[string]*time.Timer)
 	userIDRegex                               = regexp.MustCompile(`<@!?(\d+?)>`)
 	userIDUpQuotes                            = make(map[string][]string)
 	voiceMutex                                sync.Mutex
@@ -376,32 +377,6 @@ func getShippoTrack(carrier, trackingNum string) (*shippoTrack, error) {
 		return nil, err
 	}
 	return &status, nil
-}
-
-func getSunrise(date time.Time) (*time.Time, error) {
-	res, err := http.Get(fmt.Sprintf("https://api.sunrise-sunset.org/json?lat=%f&lng=%f&date=%s&formatted=0", botLat, botLng, date.Format("2006-01-02")))
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var response struct {
-		Results struct {
-			Sunrise time.Time `json:"sunrise"`
-		} `json:"results"`
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, err
-	}
-	if response.Status != "OK" {
-		return nil, fmt.Errorf("Non-OK Status: %s", response.Status)
-	}
-	return &response.Results.Sunrise, nil
 }
 
 func spam(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1139,7 +1114,7 @@ func spamdiscord(session *discordgo.Session, guildID, chanID, authorID, messageI
 		lastQuoteIDs[chanID] = quoteID
 		userIDUpQuotes[chanID] = make([]string, 0)
 	}
-	return fmt.Sprintf("%s", outStr), nil
+	return outStr, nil
 }
 
 func spamdiscord1(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -1188,7 +1163,7 @@ func maths(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	}
 	if response.NumPods == len(response.Pods) && response.NumPods > 0 {
 		for _, pod := range response.Pods {
-			if pod.Primary != nil && *(pod.Primary) == true {
+			if pod.Primary != nil && *(pod.Primary) {
 				return pod.Plaintext, nil
 			}
 		}
@@ -1284,7 +1259,7 @@ func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	time.Sleep(1 * time.Second)
 	session.ChannelMessageDelete(chanID, messageID)
 	for i := 0; i < 10; i++ {
-		if currentVoiceSessions[guildID].Ready == false || currentVoiceSessions[guildID].OpusSend == nil {
+		if !currentVoiceSessions[guildID].Ready || currentVoiceSessions[guildID].OpusSend == nil {
 			time.Sleep(1 * time.Second)
 			if i == 9 {
 				err := currentVoiceSessions[guildID].Disconnect()
@@ -1636,7 +1611,7 @@ func age(session *discordgo.Session, guildID, chanID, authorID, messageID string
 	if err != nil {
 		return "", err
 	}
-	timeSince := timeSinceStr(time.Now().Sub(timeJoined))
+	timeSince := timeSinceStr(time.Since(timeJoined))
 	return fmt.Sprintf("%s joined this server %s ago on %s", member.User.Username, timeSince, timeJoined.Format("Jan _2, 2006")), nil
 }
 
@@ -1663,7 +1638,7 @@ func userage(session *discordgo.Session, guildID, chanID, authorID, messageID st
 		return "", err
 	}
 	creationTime := time.Unix(int64((userIDint>>22)+discordEpoch)/1000, 0)
-	timeSince := timeSinceStr(time.Now().Sub(creationTime))
+	timeSince := timeSinceStr(time.Since(creationTime))
 	return fmt.Sprintf("%s joined Discord %s ago", username, timeSince), nil
 }
 
@@ -1803,6 +1778,9 @@ func playtime(session *discordgo.Session, guildID, chanID, authorID, messageID s
 				return "", err
 			}
 			rows, err = sqlClient.Query(`SELECT user_id, create_date, game, presence FROM user_presence WHERE guild_id = $1 AND user_id = $2 ORDER BY create_date ASC`, guildIDint, userIDint)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 	if rows == nil {
@@ -1911,6 +1889,9 @@ func recentPlaytime(session *discordgo.Session, guildID, chanID, authorID, messa
 				return "", err
 			}
 			rows, err = sqlClient.Query(`SELECT user_id, create_date, game, presence FROM user_presence WHERE guild_id = $1 AND user_id = $2 AND create_date > $3 ORDER BY create_date ASC`, guildIDint, userIDint, startTime)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
 	if rows == nil {
@@ -1953,7 +1934,6 @@ func activity(session *discordgo.Session, guildID, chanID, authorID, messageID s
 	}
 	if len(args) > 0 {
 		var userID string
-		var err error
 		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
 			userID = match[1]
 		} else {
@@ -1966,7 +1946,8 @@ func activity(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		if err != nil {
 			return "", err
 		}
-		userIDint, err := strconv.ParseUint(userID, 10, 64)
+		var userIDint uint64
+		userIDint, err = strconv.ParseUint(userID, 10, 64)
 		if err != nil {
 			return "", err
 		}
@@ -2058,7 +2039,6 @@ func activityDay(session *discordgo.Session, guildID, chanID, authorID, messageI
 	}
 	if len(args) > 0 {
 		var userID string
-		var err error
 		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
 			userID = match[1]
 		} else {
@@ -2071,7 +2051,8 @@ func activityDay(session *discordgo.Session, guildID, chanID, authorID, messageI
 		if err != nil {
 			return "", err
 		}
-		userIDint, err := strconv.ParseUint(userID, 10, 64)
+		var userIDint uint64
+		userIDint, err = strconv.ParseUint(userID, 10, 64)
 		if err != nil {
 			return "", err
 		}
@@ -2172,7 +2153,7 @@ func nest(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	err := gambleChannelCheck(guildID, chanID)
 	if err != nil {
-		return fmt.Sprintf("Please don't do that in here. Try <#190518994875318272>"), nil
+		return "Please don't do that in here. Try <#190518994875318272>", nil
 	}
 	if rouletteWheelSpinningPending[guildID] {
 		return "I'm working on it.", nil
@@ -2218,7 +2199,7 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 				}
 			}
 		}
-		if len(rouletteBets[guildID]) > 0 && winner == false {
+		if len(rouletteBets[guildID]) > 0 && !winner {
 			session.ChannelMessageSend(chanID, "Everyone loses!")
 		}
 		rouletteBets[guildID] = make([]userBet, 0)
@@ -2231,7 +2212,7 @@ func roulette(session *discordgo.Session, guildID, chanID, authorID, messageID s
 func bet(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	err := gambleChannelCheck(guildID, chanID)
 	if err != nil {
-		return fmt.Sprintf("Please don't do that in here. Try <#190518994875318272>"), nil
+		return "Please don't do that in here. Try <#190518994875318272>", nil
 	}
 	if len(args) < 2 {
 		privateChannel, err := session.UserChannelCreate(authorID)
@@ -2686,7 +2667,7 @@ func gameactivity(session *discordgo.Session, guildID, chanID, authorID, message
 }
 
 func invite(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	neededPermissions := discordgo.PermissionReadMessages |
+	neededPermissions := discordgo.PermissionViewChannel |
 		discordgo.PermissionSendMessages |
 		discordgo.PermissionManageMessages |
 		discordgo.PermissionReadMessageHistory |
@@ -2767,11 +2748,9 @@ func lastPlayed(session *discordgo.Session, guildID, chanID, authorID, messageID
 			break
 		}
 	}
-	if games != nil {
-		for _, g := range games {
-			if g.Type == discordgo.ActivityTypeGame {
-				return fmt.Sprintf("%s is currently playing %s", username, g.Name), nil
-			}
+	for _, g := range games {
+		if g.Type == discordgo.ActivityTypeGame {
+			return fmt.Sprintf("%s is currently playing %s", username, g.Name), nil
 		}
 	}
 	guildIDint, err := strconv.ParseUint(guild.ID, 10, 64)
@@ -2992,7 +2971,7 @@ func topOnline(session *discordgo.Session, guildID, chanID, authorID, messageID 
 }
 
 func ooer(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	arg := []rune(strings.Join(args, " "))
+	arg := strings.Join(args, " ")
 	var message []rune
 	for _, r := range arg {
 		message = append(message, r, rune(rand.Intn(0x70)+0x300), rune(rand.Intn(0x70)+0x300))
@@ -3063,36 +3042,6 @@ func track(session *discordgo.Session, guildID, chanID, authorID, messageID stri
 	return message, nil
 }
 
-func gtext(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	/*user, err := getUser(session, authorID)
-	if err != nil {
-		fmt.Println(err)
-		return "", nil
-	}*/
-	imageFile, err := ioutil.TempFile("", "disgoGtext")
-	if err != nil {
-		fmt.Println(err)
-		return "", nil
-	}
-	defer os.Remove(imageFile.Name())
-	defer imageFile.Close()
-
-	if err = exec.Command("convert", "-size", "400x12", "xc:transparent", "-font", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "-pointsize", "10", "-fill", "#789922", "-stroke", "#789922", "-draw", fmt.Sprintf("text 0,10 '%s'", fmt.Sprintf(">%s", args[0])), fmt.Sprintf("png:%s", imageFile.Name())).Run(); err != nil {
-		fmt.Println(err)
-		return "", nil
-	}
-
-	_, err = session.ChannelFileSend(chanID, "greentext.png", imageFile)
-	if err != nil {
-		fmt.Println(err)
-		return "", nil
-	}
-	if err := session.ChannelMessageDelete(chanID, messageID); err != nil {
-		fmt.Println(err)
-	}
-	return "", nil
-}
-
 func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	numMessages := rand.Intn(5) + 3
 	var rows *sql.Rows
@@ -3103,7 +3052,6 @@ func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	}
 	if len(args) > 0 {
 		var userID string
-		var err error
 		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
 			userID = match[1]
 		} else {
@@ -3112,7 +3060,8 @@ func greentext(session *discordgo.Session, guildID, chanID, authorID, messageID 
 				return "", err
 			}
 		}
-		userIDint, err := strconv.ParseUint(userID, 10, 64)
+		var userIDint uint64
+		userIDint, err = strconv.ParseUint(userID, 10, 64)
 		if err != nil {
 			return "", err
 		}
@@ -3595,17 +3544,17 @@ func topEmoji(session *discordgo.Session, guildID, chanID, authorID, messageID s
 }
 
 func army(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	days := math.Ceil(time.Date(2018, 6, 21, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	days := math.Ceil(time.Until(time.Date(2018, 6, 21, 0, 0, 0, 0, time.Local)).Hours() / 24)
 	return fmt.Sprintf("%.0f days until June 21, 2018", days), nil
 }
 
 func willGrad(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	days := math.Ceil(time.Date(2018, 5, 11, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	days := math.Ceil(time.Until(time.Date(2018, 5, 11, 0, 0, 0, 0, time.Local)).Hours() / 24)
 	return fmt.Sprintf("%.0f days until May 11, 2018", days), nil
 }
 
 func grad(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	days := math.Ceil(time.Date(2019, 5, 17, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	days := math.Ceil(time.Until(time.Date(2019, 5, 17, 0, 0, 0, 0, time.Local)).Hours() / 24)
 	return fmt.Sprintf("%.0f days until May 17, 2019", days), nil
 }
 
@@ -3628,7 +3577,7 @@ func christmas(session *discordgo.Session, guildID, chanID, authorID, messageID 
 	} else if now.Day() == 25 {
 		return "Merry Christmas!", nil
 	}
-	days := math.Ceil(time.Date(now.Year(), 12, 25, 0, 0, 0, 0, time.Local).Sub(time.Now()).Hours() / 24)
+	days := math.Ceil(time.Until(time.Date(now.Year(), 12, 25, 0, 0, 0, 0, time.Local)).Hours() / 24)
 	s := "s"
 	if days == 1 {
 		s = ""
@@ -3766,7 +3715,7 @@ func peeCounter(session *discordgo.Session, guildID, chanID, authorID, messageID
 
 	sort.Slice(usernameCounters, func(i, j int) bool { return usernameCounters[i].Count > usernameCounters[j].Count })
 
-	message := fmt.Sprintf("Pee counts in the last 24 hours\n")
+	message := "Pee counts in the last 24 hours\n"
 	message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s - %d\n\n", "Total", totalCount)
 	for _, uc := range usernameCounters {
 		message += fmt.Sprintf("%"+strconv.Itoa(longestUsernameLength)+"s — %d\n", uc.Username, uc.Count)
@@ -3998,7 +3947,7 @@ func kappa(session *discordgo.Session, chanID, authorID, messageID string) {
 	if err != nil {
 		return
 	}
-	if lastTime, found := lastKappa[authorID]; perm&discordgo.PermissionManageMessages == discordgo.PermissionManageMessages && (!found || time.Now().Sub(lastTime) > 30*time.Second) {
+	if lastTime, found := lastKappa[authorID]; perm&discordgo.PermissionManageMessages == discordgo.PermissionManageMessages && (!found || time.Since(lastTime) > 30*time.Second) {
 		image, err := os.Open("kappa.png")
 		if err != nil {
 			return
@@ -4333,10 +4282,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			kappa(s, m.ChannelID, m.Author.ID, m.ID)
 			return
 		}
-		/*if match := greenTextRegex.FindStringSubmatch(m.Content); match != nil {
-			gtext(s, channel.GuildID, m.ChannelID, m.Author.ID, m.ID, []string{strings.Replace(match[1], `'`, `\'`, -1)})
-			return
-		}*/
 		if channel.Type == discordgo.ChannelTypeDM {
 			executeCommand(s, channel.GuildID, m, strings.Fields(m.Content))
 			return
@@ -4345,7 +4290,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 }
 
 func initGameUpdater(s *discordgo.Session) {
-	res, err := http.Get(fmt.Sprintf("http://api.steampowered.com/ISteamApps/GetAppList/v2"))
+	res, err := http.Get("http://api.steampowered.com/ISteamApps/GetAppList/v2")
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -4466,19 +4411,6 @@ func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 	}
 }
 
-func handleTypingStart(s *discordgo.Session, t *discordgo.TypingStart) {
-	if t.UserID == ownUserID {
-		return
-	}
-	if _, timerExists := typingTimer[t.UserID]; !timerExists && rand.Intn(20) == 0 {
-		typingTimer[t.UserID] = time.AfterFunc(20*time.Second, func() {
-			responses := []string{"Something to say?", "Yes?", "Don't leave us hanging...", "I'm listening."}
-			responseID := rand.Intn(len(responses))
-			s.ChannelMessageSend(t.ChannelID, fmt.Sprintf("<@%s> %s", t.UserID, responses[responseID]))
-		})
-	}
-}
-
 func handleVoiceUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 	if _, err := sqlClient.Exec(`INSERT INTO voice_state (guild_id, chan_id, user_id, session_id, deaf, mute, self_deaf, self_mute, suppress) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		v.GuildID, v.ChannelID, v.UserID, v.SessionID, v.Deaf, v.Mute, v.SelfDeaf, v.SelfMute, v.Suppress); err != nil {
@@ -4567,15 +4499,6 @@ func handleMessageUpdate(s *discordgo.Session, m *discordgo.MessageUpdate) {
 		fmt.Println("ERROR handling MessageUpdate", err.Error())
 		return
 	}
-}
-
-func normalizeKarma() {
-	if _, err := sqlClient.Exec(`UPDATE user_karma SET karma = max(karma / 3, 0)`); err != nil {
-		fmt.Println(err.Error())
-	}
-	now := time.Now()
-	nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
-	time.AfterFunc(nextRun.Sub(now), normalizeKarma)
 }
 
 func giveAllowance() {
@@ -4768,7 +4691,6 @@ func main() {
 
 	client.AddHandler(makeMessageCreate())
 	client.AddHandler(handlePresenceUpdate)
-	//client.AddHandler(handleTypingStart)
 	client.AddHandler(handleVoiceUpdate)
 	client.AddHandler(handleGuildMemberAdd)
 	client.AddHandler(handleGuildMemberRemove)
@@ -4856,31 +4778,29 @@ func main() {
 	signals := make(chan os.Signal, 1)
 
 	go func() {
-		select {
-		case <-signals:
-			voiceMutex.Lock()
-			defer voiceMutex.Unlock()
-			for guildID, voiceSession := range currentVoiceSessions {
-				if voiceSession != nil {
-					stopPlayer(guildID)
-					err := voiceSession.Disconnect()
-					if err != nil {
-						fmt.Println("ERROR leaving voice channel " + err.Error())
-					}
-				}
-			}
-			for _, guild := range userGuilds {
-				guildID, err := strconv.ParseUint(guild.ID, 10, 64)
+		<-signals
+		voiceMutex.Lock()
+		defer voiceMutex.Unlock()
+		for guildID, voiceSession := range currentVoiceSessions {
+			if voiceSession != nil {
+				stopPlayer(guildID)
+				err := voiceSession.Disconnect()
 				if err != nil {
-					fmt.Println("ERROR parsing guild ID " + err.Error())
-					return
+					fmt.Println("ERROR leaving voice channel " + err.Error())
 				}
-				sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guildID, ownUserIDint)
 			}
-			client.Logout()
-			client.Close()
-			os.Exit(0)
 		}
+		for _, guild := range userGuilds {
+			guildID, err := strconv.ParseUint(guild.ID, 10, 64)
+			if err != nil {
+				fmt.Println("ERROR parsing guild ID " + err.Error())
+				return
+			}
+			sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guildID, ownUserIDint)
+		}
+		client.Logout()
+		client.Close()
+		os.Exit(0)
 	}()
 	signal.Notify(signals, os.Interrupt)
 
@@ -4902,9 +4822,6 @@ func main() {
 		time.AfterFunc(reminderTime.Sub(now), func() { client.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
 	}
 	rows.Close()
-
-	//nextRun := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.Local)
-	//time.AfterFunc(nextRun.Sub(now), normalizeKarma)
 
 	now = time.Now()
 	nextAllowance := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
