@@ -58,7 +58,7 @@ func StreamInfo(channel, clientID string) (string, error) {
 		return "", err
 	}
 	if users.Users == nil || len(users.Users) < 1 || users.Users[0].ID == nil {
-		return "", errors.New("Not found")
+		return "", errors.New("not found")
 	}
 
 	streamReq, err := http.NewRequest("GET", fmt.Sprintf("https://api.twitch.tv/kraken/streams/%s", url.QueryEscape(*users.Users[0].ID)), nil)

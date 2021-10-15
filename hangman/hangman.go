@@ -36,7 +36,7 @@ func NewGame(authorID string) *Game {
 func (g *Game) Guess(guesserID string, guess byte) (bool, error) {
 	guess = bytes.ToLower([]byte{guess})[0]
 	if guesserID != g.authorID && time.Since(g.authorLastGuessTime) < maxMinutesBetweenGuesses*time.Minute {
-		return false, fmt.Errorf("You can't guess unless you started the game or it's been %d minutes since the last guess.", maxMinutesBetweenGuesses)
+		return false, fmt.Errorf("you can't guess unless you started the game or it's been %d minutes since the last guess", maxMinutesBetweenGuesses)
 	}
 	correctGuess := false
 	for i := range g.answer {

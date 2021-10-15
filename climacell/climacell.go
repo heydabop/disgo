@@ -42,5 +42,5 @@ func GetAQI(lat, lng float64, apiKey string) (uint64, error) {
 	if len(response.Data.Timelines) == 1 && len(response.Data.Timelines[0].Intervals) == 1 && response.Data.Timelines[0].Timestep == "current" {
 		return response.Data.Timelines[0].Intervals[0].Values.EpaIndex, nil
 	}
-	return 0, errors.New("Response missing AQI")
+	return 0, errors.New("response missing AQI")
 }

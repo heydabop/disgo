@@ -39,13 +39,13 @@ func Geocode(address, mapsKey string) (*Point, error) {
 		return nil, err
 	}
 	if geo.Status != "OK" {
-		return nil, fmt.Errorf("Expected status \"OK\" got \"%s\"", geo.Status)
+		return nil, fmt.Errorf("expected status \"OK\" got \"%s\"", geo.Status)
 	}
 	if len(geo.Results) < 1 {
 		return nil, fmt.Errorf("0 location results")
 	}
 	if geo.Results[0].Geometry.Location == nil {
-		return nil, fmt.Errorf("Missing geometry in result")
+		return nil, fmt.Errorf("missing geometry in result")
 	}
 	return geo.Results[0].Geometry.Location, nil
 }
