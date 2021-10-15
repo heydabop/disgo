@@ -42,7 +42,7 @@ import (
 	twitchApi "github.com/heydabop/disgo/twitch"
 	_ "github.com/lib/pq"
 	"github.com/nfnt/resize"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 type commandFunc func(*discordgo.Session, string, string, string, string, []string) (string, error)
@@ -4034,7 +4034,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	meanRegex := regexp.MustCompile(`(?i)((fuc)|(shit)|(garbage)|(garbo)).*bot($|[[:space:]])`)
 	botRegex := regexp.MustCompile(`(?i)(^|\s)(bot|robot)($|\s)`)
 	questionRegex := regexp.MustCompile(`^<@!?` + ownUserID + `>.*\w+.*\?$`)
-	inTheChatRegex := regexp.MustCompile(`(?i)can i get a\s+(.*)\s+in the chat`)
+	inTheChatRegex := regexp.MustCompile(`(?i)can i get an?\s+(.*)\s+in the chat`)
 	kappaRegex := regexp.MustCompile(`(?i)^\s*kappa\s*$`)
 	//greenTextRegex := regexp.MustCompile(`(?i)^\s*>\s*([^:].+)$`)
 	funcMap := map[string]commandFunc{
