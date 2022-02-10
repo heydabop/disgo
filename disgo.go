@@ -482,10 +482,6 @@ func vote(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 		return "No.", nil
 	}
 
-	if (authorID == "274773965166084107" && userID == "98468637962158080") || (userID == "274773965166084107" && authorID == "98468637962158080") {
-		return "", nil
-	}
-
 	var lastVoterIDAgainstUser string
 	var lastVoteTime time.Time
 	if err := sqlClient.QueryRow(`SELECT voter_id, create_date FROM vote WHERE guild_id = $1 AND votee_id = $2 ORDER BY create_date DESC LIMIT 1`, guildID, authorID).Scan(&lastVoterIDAgainstUser, &lastVoteTime); err != nil {
@@ -4102,10 +4098,36 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"speedtest":      commandFunc(speedtest),
 		string([]byte{119, 97, 116, 99, 104, 108, 105, 115, 116}): commandFunc(wlist),
 	}
+	newCommands := map[string]bool{
+		"birdtime": true,
+		"fortune": true,
+		"lastseen": true,
+		"karma": true,
+		"mirotime": true,
+		"natime": true,
+		"nieltime": true,
+		"playtime": true,
+		"realtime": true,
+		"recentplaytime": true,
+		"sebbitime": true,
+		"top": true,
+		"toplength": true,
+		"twintime": true,
+		"ustime": true,
+		"weather": true,
+		"whois": true,
+		"votes": true,
+	}
 
 	executeCommand := func(s *discordgo.Session, guildID string, m *discordgo.MessageCreate, command []string) bool {
-		if cmd, valid := funcMap[strings.ToLower(command[0])]; valid {
-			switch command[0] {
+		commandName := strings.ToLower(command[0])
+		if cmd, valid := funcMap[commandName]; valid {
+			if guildID == "184428741450006528" || guildID == "161010139309015040" {
+				if _, new := newCommands[commandName]; new {
+					return true
+				}
+			}
+			switch commandName {
 			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute", "pee":
 			default:
 				s.ChannelTyping(m.ChannelID)
@@ -4113,7 +4135,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			reply, err := cmd(s, guildID, m.ChannelID, m.Author.ID, m.ID, command[1:])
 			if err != nil {
 				var errorID uuid.UUID
-				if sqlErr := sqlClient.QueryRow(`INSERT INTO error(command, args, error) VALUES ($1, $2, $3) RETURNING id`, command[0], strings.Join(command[1:], " "), err.Error()).Scan(&errorID); sqlErr != nil {
+				if sqlErr := sqlClient.QueryRow(`INSERT INTO error(command, args, error) VALUES ($1, $2, $3) RETURNING id`, commandName, strings.Join(command[1:], " "), err.Error()).Scan(&errorID); sqlErr != nil {
 					fmt.Println("ERROR recording error " + sqlErr.Error())
 				}
 				message, msgErr := s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("⚠ `%s`", err.Error()))
@@ -4123,7 +4145,7 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 					lastCommandMessages[m.Author.ID] = *m.Message
 					lastMessagesByAuthor[m.Author.ID] = *message
 				}
-				fmt.Println("ERROR in " + command[0])
+				fmt.Println("ERROR in " + commandName)
 				fmt.Printf("ARGS: %v\n", command[1:])
 				fmt.Println("ERROR: " + err.Error())
 				return true
