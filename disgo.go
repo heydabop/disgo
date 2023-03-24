@@ -4348,71 +4348,8 @@ func updateGame(s *discordgo.Session) {
 			currentGame = strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(gamelist[index]), "®", ""), "™", "")
 		}
 	}
-	userGuilds, err := s.UserGuilds(100, "", "")
-	if err != nil {
-		fmt.Println("Error getting user guilds", err.Error())
-	}
-
 	if err := s.UpdateGameStatus(0, currentGame); err != nil {
 		fmt.Println("ERROR updating game: ", err.Error())
-	}
-	for _, guild := range userGuilds {
-		guildID, err := strconv.ParseUint(guild.ID, 10, 64)
-		if err != nil {
-			fmt.Println("ERROR parsing guild ID " + err.Error())
-			continue
-		}
-		if _, err := sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'online', $3)`, guildID, ownUserIDint, currentGame); err != nil {
-			fmt.Println("ERROR inserting self into UserPresence DB")
-			fmt.Println(err.Error())
-		}
-	}
-}
-
-func handlePresenceUpdate(s *discordgo.Session, p *discordgo.PresenceUpdate) {
-	if p.User == nil {
-		return
-	}
-	if p.User.ID == ownUserID { //doesnt happen now, might later, prevent double insertions
-		return
-	}
-	gameName := ""
-	if p.Activities != nil {
-		for _, g := range p.Activities {
-			if g.Type == discordgo.ActivityTypeGame {
-				gameName = strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(g.Name), "®", ""), "™", "")
-				break
-			}
-		}
-	}
-	if len(gameName) > 0 {
-		if user, err := s.User(p.User.ID); err == nil && user.Bot {
-			gameName = ""
-		}
-	}
-	/*user, err := s.User(p.User.ID)
-	if err != nil {
-		fmt.Println("ERROR getting user")
-		fmt.Println(err.Error())
-	} else {
-		fmt.Printf("%20s %20s %20s : %s %s\n", p.GuildID, now.Format(time.Stamp), user.Username, p.Status, gameName)
-	}*/
-	if gameName == "Hello Kitty: Island Adventure" {
-		gameName = ""
-	}
-	guildID, err := strconv.ParseUint(p.GuildID, 10, 64)
-	if err != nil {
-		fmt.Println("ERROR parsing guild ID " + err.Error())
-		return
-	}
-	userID, err := strconv.ParseUint(p.User.ID, 10, 64)
-	if err != nil {
-		fmt.Println("ERROR parsing user ID " + err.Error())
-		return
-	}
-	if _, err := sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, guildID, userID, string(p.Status), gameName); err != nil {
-		fmt.Println("ERROR insert into UserPresence DB")
-		fmt.Println(err.Error())
 	}
 }
 
@@ -4695,7 +4632,6 @@ func main() {
 	}
 
 	client.AddHandler(makeMessageCreate())
-	client.AddHandler(handlePresenceUpdate)
 	client.AddHandler(handleVoiceUpdate)
 	client.AddHandler(handleGuildMemberAdd)
 	client.AddHandler(handleGuildMemberRemove)
@@ -4719,67 +4655,6 @@ func main() {
 		}
 	}()
 
-	userGuilds, err := client.UserGuilds(100, "", "")
-	if err != nil {
-		fmt.Println("Error getting user guilds", err.Error())
-	}
-	tran, err := sqlClient.Begin()
-	if err != nil {
-		fmt.Println("Error starting transaction", err.Error())
-	} else {
-		for _, userGuild := range userGuilds {
-			guild, err := client.Guild(userGuild.ID)
-			if err != nil {
-				fmt.Println("Error getting guild", err.Error())
-				continue
-			}
-			guildID, err := strconv.ParseUint(guild.ID, 10, 64)
-			if err != nil {
-				fmt.Println("ERROR parsing guild ID " + err.Error())
-				return
-			}
-			userMap := make(map[string]bool)
-			for _, presence := range guild.Presences {
-				gameName := ""
-				if presence.Activities != nil {
-					for _, g := range presence.Activities {
-						if g.Type == discordgo.ActivityTypeGame {
-							gameName = strings.ReplaceAll(strings.ReplaceAll(strings.TrimSpace(g.Name), "®", ""), "™", "")
-							break
-						}
-					}
-				}
-				if len(gameName) > 0 {
-					if user, err := client.User(presence.User.ID); err == nil && user.Bot {
-						gameName = ""
-					}
-				}
-				userID, err := strconv.ParseUint(presence.User.ID, 10, 64)
-				if err != nil {
-					fmt.Println("ERROR parsing user ID " + err.Error())
-					return
-				}
-				if _, err := tran.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, $3, $4)`, guildID, userID, string(presence.Status), gameName); err != nil {
-					fmt.Println("ERROR inserting into user_presence", err.Error())
-				}
-				userMap[presence.User.ID] = true
-			}
-			for _, member := range guild.Members {
-				if _, found := userMap[member.User.ID]; !found {
-					userID, err := strconv.ParseUint(member.User.ID, 10, 64)
-					if err != nil {
-						fmt.Println("ERROR parsing user ID " + err.Error())
-						return
-					}
-					if _, err := tran.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guildID, userID); err != nil {
-						fmt.Println("ERROR inserting into user_presence", err.Error())
-					}
-				}
-			}
-		}
-		tran.Commit()
-	}
-
 	signals := make(chan os.Signal, 1)
 
 	go func() {
@@ -4794,14 +4669,6 @@ func main() {
 					fmt.Println("ERROR leaving voice channel " + err.Error())
 				}
 			}
-		}
-		for _, guild := range userGuilds {
-			guildID, err := strconv.ParseUint(guild.ID, 10, 64)
-			if err != nil {
-				fmt.Println("ERROR parsing guild ID " + err.Error())
-				return
-			}
-			sqlClient.Exec(`INSERT INTO user_presence (guild_id, user_id, presence, game) VALUES ($1, $2, 'offline', '')`, guildID, ownUserIDint)
 		}
 		client.Logout()
 		client.Close()
