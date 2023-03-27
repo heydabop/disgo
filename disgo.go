@@ -4169,9 +4169,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 			}
 		}()
 
-		now := time.Now()
-		fmt.Printf("%20s %20s %32s > %s\n", m.ChannelID, now.Format(time.Stamp), m.Author.Username, m.Content)
-
 		messageID, err := strconv.ParseUint(m.ID, 10, 64)
 		if err != nil {
 			fmt.Println("ERROR parsing message ID " + err.Error())
@@ -4639,6 +4636,7 @@ func main() {
 	client.AddHandler(handleMessageDelete)
 	client.AddHandler(handleMessageUpdate)
 	client.Open()
+	fmt.Println("Connected")
 	defer client.Close()
 	defer client.Logout()
 	defer func() {
