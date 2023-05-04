@@ -36,9 +36,6 @@ import (
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
-	"github.com/heydabop/disgo/climacell"
-	"github.com/heydabop/disgo/darksky"
-	"github.com/heydabop/disgo/google"
 	"github.com/heydabop/disgo/hangman"
 	"github.com/heydabop/disgo/markov"
 	_ "github.com/lib/pq"
@@ -3771,78 +3768,6 @@ func euTime(session *discordgo.Session, guildID, chanID, authorID, messageID str
 	return fmt.Sprintf("%s - %s", now.In(loc1).Format("3:04 PM"), now.In(loc2).Format("3:04 PM")), nil
 }
 
-func weather(sesseion *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	var input string
-	if len(args) == 0 {
-		input = fmt.Sprintf("%s %s", darkSkyLat, darkSkyLng)
-	} else {
-		input = strings.Join(args, " ")
-	}
-
-	var lat, lng float64
-	if match := pointRegex.FindStringSubmatch(input); match != nil {
-		latStr := match[1]
-		lngStr := match[2]
-		var err error
-		if lat, err = strconv.ParseFloat(latStr, 64); err != nil {
-			return "", err
-		}
-		if lng, err = strconv.ParseFloat(lngStr, 64); err != nil {
-			return "", err
-		}
-	} else {
-		point, err := google.Geocode(input, mapsKey)
-		if err != nil {
-			return "", err
-		}
-		lat, lng = point.Lat, point.Lng
-	}
-	response, err := darksky.GetCurrent(lat, lng, darkSkySecret)
-	if err != nil {
-		return "", err
-	}
-	aqi, err := climacell.GetAQI(lat, lng, climaCellKey)
-	var aqiStr string
-	if err == nil {
-		var health string
-		if aqi < 51 {
-			health = "Good"
-		} else if aqi < 101 {
-			health = "Moderate"
-		} else if aqi < 151 {
-			health = "Unhealthy for sensitive groups"
-		} else if aqi < 201 {
-			health = "Unhealthy"
-		} else if aqi < 301 {
-			health = "Very Unhealthy"
-		} else {
-			health = "Hazardous"
-		}
-		aqiStr = fmt.Sprintf("%d (%s)", aqi, health)
-	} else {
-		aqiStr = "--"
-		fmt.Printf("Error getting ClimaCell AQI: %s", err)
-	}
-	return fmt.Sprintf(`temperature | %.0f °F (feels like %.0f °F)
-conditions | %s
-relative humidity | %.0f%% (dew point: %.0f °F)
-wind | %.1f mph from %d° (gusts: %.1f mph)
-uv index | %d
-air quality index | %s
-forecast | %s`,
-		response.Currently.Temperature,
-		response.Currently.ApparentTemperature,
-		strings.ToLower(response.Currently.Summary),
-		response.Currently.Humidity*100,
-		response.Currently.DewPoint,
-		response.Currently.WindSpeed,
-		response.Currently.WindBearing,
-		response.Currently.WindGust,
-		response.Currently.UvIndex,
-		aqiStr,
-		strings.ToLower(strings.Trim(response.Hourly.Summary, "."))), nil
-}
-
 func help(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	privateChannel, err := session.UserChannelCreate(authorID)
 	if err != nil {
@@ -4075,7 +4000,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"ustime":         commandFunc(realTime),
 		"voicekick":      commandFunc(voicekick),
 		"votes":          commandFunc(votes),
-		"weather":        commandFunc(weather),
 		"whois":          commandFunc(whois),
 		"willgrad":       commandFunc(willGrad),
 		"xd":             commandFunc(xd),
@@ -4104,7 +4028,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"twintime":       true,
 		"ustime":         true,
 		"votes":          true,
-		"weather":        true,
 		"whois":          true,
 	}
 
