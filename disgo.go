@@ -1509,10 +1509,14 @@ func remindme(session *discordgo.Session, guildID, chanID, authorID, messageID s
 		responses := []string{"Sorry, I lost my Delorean.", "Hold on, gotta hit 88MPH first.", "Too late.", "I'm sorry Dave, I can't do that.", ":|", "Time is a one-way street."}
 		return responses[rand.Intn(len(responses))], nil
 	}
-	if _, err := sqlClient.Exec(`INSERT INTO reminder (chan_id, author_id, send_time, content) VALUES ($1, $2, $3, $4)`, chanID, authorID, remindTime.In(time.FixedZone("UTC", 0)), content); err != nil {
+	var reminderId int32
+	if err := sqlClient.QueryRow(`INSERT INTO reminder (chan_id, author_id, send_time, content) VALUES ($1, $2, $3, $4) RETURNING id`, chanID, authorID, remindTime.In(time.FixedZone("UTC", 0)), content).Scan(&reminderId); err != nil {
 		return "", err
 	}
-	time.AfterFunc(remindTime.Sub(now), func() { session.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content)) })
+	time.AfterFunc(remindTime.Sub(now), func() {
+		session.ChannelMessageSend(chanID, fmt.Sprintf("<@%s> %s", authorID, content))
+		sqlClient.Exec(`UPDATE reminder SET sent_at = now() WHERE id = $1`, reminderId)
+	})
 	return fmt.Sprintf("👍 %s", remindTime.Format(time.RFC1123Z)), nil
 }
 
