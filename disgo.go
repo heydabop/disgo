@@ -33,7 +33,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/gyuho/goling/similar"
 	"github.com/heydabop/disgo/hangman"
@@ -1179,97 +1178,6 @@ func ping(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 
 func xd(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
 	return "PUCK FALMER", nil
-}
-
-func asuh(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
-	var userID, joinUserID string
-	if len(args) > 0 {
-		var err error
-		if match := userIDRegex.FindStringSubmatch(args[0]); match != nil {
-			userID = match[1]
-		} else {
-			userID, err = getMostSimilarUserID(session, chanID, strings.Join(args, " "))
-			if err != nil {
-				return "", err
-			}
-		}
-	}
-	if len(userID) > 0 {
-		joinUserID = userID
-	} else {
-		joinUserID = authorID
-	}
-	voiceMutex.Lock()
-	defer voiceMutex.Unlock()
-
-	guild, err := session.State.Guild(guildID)
-	if err != nil {
-		return "", err
-	}
-	voiceChanID := ""
-	for _, state := range guild.VoiceStates {
-		if state.UserID == joinUserID {
-			voiceChanID = state.ChannelID
-			break
-		}
-	}
-	if voiceChanID == "" {
-		return "I can't find which voice channel you're in.", nil
-	}
-
-	if currentVoiceSessions[guildID] != nil {
-		if currentVoiceSessions[guildID].ChannelID == voiceChanID && currentVoiceSessions[guildID].GuildID == guild.ID {
-			return "", nil
-		}
-		stopPlayer(guildID)
-		err = currentVoiceSessions[guildID].Disconnect()
-		currentVoiceSessions[guildID] = nil
-		if err != nil {
-			return "", err
-		}
-		time.Sleep(300 * time.Millisecond)
-	}
-
-	currentVoiceSessions[guildID], err = session.ChannelVoiceJoin(guild.ID, voiceChanID, false, false)
-	if err != nil {
-		currentVoiceSessions[guildID] = nil
-		return "", err
-	}
-
-	time.Sleep(1 * time.Second)
-	session.ChannelMessageDelete(chanID, messageID)
-	for i := 0; i < 10; i++ {
-		if !currentVoiceSessions[guildID].Ready || currentVoiceSessions[guildID].OpusSend == nil {
-			time.Sleep(1 * time.Second)
-			if i == 9 {
-				err := currentVoiceSessions[guildID].Disconnect()
-				currentVoiceSessions[guildID] = nil
-				if err != nil {
-					fmt.Println("ERROR disconnecting from voice channel " + err.Error())
-				}
-				return "", nil
-			}
-			continue
-		}
-		suh := rand.Intn(77)
-		currentVoiceChans[guildID] = make(chan bool)
-		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], fmt.Sprintf("suh/suh%d.mp3", suh), currentVoiceChans[guildID])
-		break
-	}
-
-	time.Sleep(5 * time.Second)
-
-	if rand.Intn(3) == 0 {
-		dgvoice.PlayAudioFile(currentVoiceSessions[guildID], "goodbye.mp3", currentVoiceChans[guildID])
-		time.Sleep(1 * time.Second)
-	}
-	stopPlayer(guildID)
-	err = currentVoiceSessions[guildID].Disconnect()
-	currentVoiceSessions[guildID] = nil
-	if err != nil {
-		fmt.Println("ERROR disconnecting from voice channel " + err.Error())
-	}
-	return "", nil
 }
 
 func upquote(session *discordgo.Session, guildID, chanID, authorID, messageID string, args []string) (string, error) {
@@ -3779,7 +3687,6 @@ func help(session *discordgo.Session, guildID, chanID, authorID, messageID strin
 	}
 	_, err = session.ChannelMessageSend(privateChannel.ID, `**activity** - shows messages per hour over lifetime of channel
 **age** [username] - displays how long [username] has been in this server
-**asuh** - joins your voice channel
 **ayy**
 **bet** - place a roulette bet (type /bet for more help)
 **bitrate** - shows voice channels and their bitrates
@@ -3904,7 +3811,6 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 		"age":            commandFunc(age),
 		"army":           commandFunc(army),
 		"ascii":          commandFunc(ascii),
-		"asuh":           commandFunc(asuh),
 		"ayy":            commandFunc(ayy),
 		"bet":            commandFunc(bet),
 		"birdtime":       commandFunc(birdTime),
@@ -4038,13 +3944,13 @@ func makeMessageCreate() func(*discordgo.Session, *discordgo.MessageCreate) {
 	executeCommand := func(s *discordgo.Session, guildID string, m *discordgo.MessageCreate, command []string) bool {
 		commandName := strings.ToLower(command[0])
 		if cmd, valid := funcMap[commandName]; valid {
-			if guildID == "184428741450006528" || guildID == "161010139309015040" {
+			if guildID == "184428741450006528" || guildID == "161010139309015040" || guildID == "166762056828059648" {
 				if _, new := newCommands[commandName]; new {
 					return true
 				}
 			}
 			switch commandName {
-			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "asuh", "uq", "uqquote", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute", "pee":
+			case "upvote", "downvote", "help", "commands", "command", "rename", "delete", "uq", "uqquote", "bet", "permission", "voicekick", "timeout", "ignore", "mute", "unignore", "unmute", "pee":
 			default:
 				s.ChannelTyping(m.ChannelID)
 			}
@@ -4456,25 +4362,6 @@ func checkShipments(s *discordgo.Session) {
 	}
 }
 
-func alexaAsuh(session *discordgo.Session) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-		body, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-		if string(body) != alexaBody {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			return
-		}
-		go asuh(session, "98470233999675392", "98470233999675392", "98482369446543360", "-1", []string{})
-	}
-}
-
 func reportError(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query()["id"]
 	if len(id) != 1 {
@@ -4636,7 +4523,6 @@ func main() {
 
 	time.AfterFunc(5*time.Minute, func() { checkShipments(client) })
 
-	http.HandleFunc("/alexa_asuh", alexaAsuh(client))
 	http.HandleFunc("/disgo_error", reportError)
 	go func() {
 		fmt.Println(http.ListenAndServe(":8083", nil))
